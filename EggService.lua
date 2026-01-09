@@ -2,8 +2,8 @@
 脚本名称: EggService
 脚本类型: ModuleScript
 脚本位置: ServerScriptService/Server/EggService
-版本: V1.3.1
-职责: 盲盒生成/购买/背包/放置与倒计时
+版本: V1.4
+职责: 盲盒生成/购买/背包/放置/倒计时/打开
 ]]
 
 local Players = game:GetService("Players")
@@ -122,6 +122,23 @@ local function createPrompt(model, part, price)
 	return prompt
 end
 
+local function createOpenPrompt(model, part)
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.ActionText = "Open"
+	prompt.ObjectText = ""
+	prompt.HoldDuration = 1
+	prompt.MaxActivationDistance = 20
+	prompt.RequiresLineOfSight = false
+
+	local attachment = Instance.new("Attachment")
+	attachment.Name = "CapsuleOpenPrompt"
+	attachment.Position = Vector3.new(0, getPromptHeight(model, part) * 0.6, 0)
+	attachment.Parent = part
+
+	prompt.Parent = attachment
+	return prompt
+end
+
 function EggService:CreateConveyorCapsule(capsuleInfo, ownerUserId)
 	local capsuleFolder = ReplicatedStorage:WaitForChild("Capsule")
 	local source = capsuleFolder:FindFirstChild(capsuleInfo.ModelName)
@@ -181,6 +198,27 @@ function EggService:HandlePurchase(player, model, capsuleInfo)
 	model:SetAttribute("IsSold", true)
 	DataService:AddCoins(player, -capsuleInfo.Price)
 	self:GiveCapsuleTool(player, capsuleInfo)
+	model:Destroy()
+end
+
+function EggService:HandleOpen(player, model)
+	if not player or not player.Parent then
+		return
+	end
+	if not model or not model.Parent then
+		return
+	end
+	if model:GetAttribute("IsOpened") == true then
+		return
+	end
+	if model:GetAttribute("OwnerUserId") ~= player.UserId then
+		return
+	end
+	if model:GetAttribute("HatchReady") ~= true then
+		return
+	end
+
+	model:SetAttribute("IsOpened", true)
 	model:Destroy()
 end
 
@@ -351,6 +389,13 @@ function EggService:PlaceFromTool(player, tool)
 	task.delay(capsuleInfo.OpenSeconds, function()
 		if model and model.Parent then
 			model:SetAttribute("HatchReady", true)
+			local openPart = getPrimaryPart(model)
+			if openPart then
+				local openPrompt = createOpenPrompt(model, openPart)
+				openPrompt.Triggered:Connect(function(openPlayer)
+					self:HandleOpen(openPlayer, model)
+				end)
+			end
 		end
 	end)
 
