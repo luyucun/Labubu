@@ -32,6 +32,28 @@ local function getCapsuleFolder(conveyorFolder)
 	return folder
 end
 
+local function getCapsuleInfo(capsuleId)
+	if type(CapsuleConfig.GetById) == "function" then
+		return CapsuleConfig.GetById(capsuleId)
+	end
+
+	local list = CapsuleConfig.Capsules
+	if type(list) ~= "table" and type(CapsuleConfig) == "table" then
+		list = CapsuleConfig
+	end
+	if type(list) ~= "table" then
+		warn("[ConveyorService] CapsuleConfig missing GetById")
+		return nil
+	end
+
+	for _, info in ipairs(list) do
+		if info.Id == capsuleId then
+			return info
+		end
+	end
+	return nil
+end
+
 local function pickRandomCapsule(poolId)
 	local pool = CapsuleSpawnPoolConfig.GetPool(poolId)
 	if not pool then
@@ -57,7 +79,7 @@ local function pickRandomCapsule(poolId)
 		if weight > 0 then
 			acc += weight
 			if roll <= acc then
-				local capsuleInfo = CapsuleConfig.GetById(entry.CapsuleId)
+				local capsuleInfo = getCapsuleInfo(entry.CapsuleId)
 				if not capsuleInfo then
 					warn(string.format("[ConveyorService] Capsule config missing: %s", tostring(entry.CapsuleId)))
 					return nil
@@ -71,7 +93,7 @@ local function pickRandomCapsule(poolId)
 	if not lastEntry then
 		return nil
 	end
-	local capsuleInfo = CapsuleConfig.GetById(lastEntry.CapsuleId)
+	local capsuleInfo = getCapsuleInfo(lastEntry.CapsuleId)
 	if not capsuleInfo then
 		warn(string.format("[ConveyorService] Capsule config missing: %s", tostring(lastEntry.CapsuleId)))
 		return nil
@@ -95,8 +117,6 @@ end
 local function moveCapsule(model, startCFrame, endCFrame)
 	local capsuleName = model:GetAttribute("CapsuleName") or model.Name
 	local capsuleId = model:GetAttribute("CapsuleId") or 0
-	print(string.format("[ConveyorService] moveCapsule start: %s (id=%d)", capsuleName, capsuleId))
-
 	local cframeValue = Instance.new("CFrameValue")
 	cframeValue.Value = startCFrame
 	model:PivotTo(startCFrame)
@@ -124,29 +144,23 @@ local function moveCapsule(model, startCFrame, endCFrame)
 		cframeValue:Destroy()
 		if model and model.Parent then
 			local endPos = model:GetPivot().Position
-			print(string.format("[ConveyorService] Capsule destroyed (reached end): %s (id=%d), endPos=(%.1f,%.1f,%.1f)",
-				capsuleName, capsuleId, endPos.X, endPos.Y, endPos.Z))
 			model:Destroy()
 		end
 	end)
 end
 
 function ConveyorService:StartForPlayer(player, homeSlot)
-	print(string.format("[ConveyorService] StartForPlayer called: userId=%d", player.UserId))
-
 	local homeFolder = homeSlot and homeSlot.Folder
 	if not homeFolder then
 		warn("[ConveyorService] homeFolder is nil")
 		return
 	end
-	print(string.format("[ConveyorService] homeFolder found: %s", homeFolder:GetFullName()))
 
 	local conveyorFolder = homeFolder:FindFirstChild("ConveyorBelt")
 	if not conveyorFolder then
 		warn("[ConveyorService] ConveyorBelt not found")
 		return
 	end
-	print(string.format("[ConveyorService] ConveyorBelt found: %s", conveyorFolder:GetFullName()))
 
 	local startMarker = conveyorFolder:FindFirstChild("Start", true)
 	local endMarker = conveyorFolder:FindFirstChild("End", true)
@@ -154,7 +168,6 @@ function ConveyorService:StartForPlayer(player, homeSlot)
 		warn(string.format("[ConveyorService] Start/End not found: Start=%s, End=%s", tostring(startMarker), tostring(endMarker)))
 		return
 	end
-	print(string.format("[ConveyorService] Markers found: Start=%s, End=%s", startMarker:GetFullName(), endMarker:GetFullName()))
 
 	local startCFrame = resolveCFrame(startMarker)
 	local endCFrame = resolveCFrame(endMarker)
@@ -162,26 +175,17 @@ function ConveyorService:StartForPlayer(player, homeSlot)
 		warn("[ConveyorService] Start/End must be BasePart/Attachment/Model")
 		return
 	end
-	print(string.format("[ConveyorService] StartPos=(%.1f,%.1f,%.1f), EndPos=(%.1f,%.1f,%.1f)",
-		startCFrame.Position.X, startCFrame.Position.Y, startCFrame.Position.Z,
-		endCFrame.Position.X, endCFrame.Position.Y, endCFrame.Position.Z))
 
 	local state = { Active = true }
 	running[player.UserId] = state
-	print(string.format("[ConveyorService] Spawn loop starting for userId=%d", player.UserId))
 
 	task.spawn(function()
-		local spawnCount = 0
 		while state.Active and player.Parent do
 			local capsuleInfo = pickRandomCapsule(GameConfig.CapsuleSpawnPoolId)
 			if capsuleInfo then
 				local model = EggService:CreateConveyorCapsule(capsuleInfo, player.UserId)
 				if model then
-					spawnCount += 1
 					model.Parent = getCapsuleFolder(conveyorFolder)
-					local pos = model:GetPivot().Position
-					print(string.format("[ConveyorService] Capsule #%d spawned: name=%s, id=%d, pos=(%.1f,%.1f,%.1f)",
-						spawnCount, capsuleInfo.Name, capsuleInfo.Id, pos.X, pos.Y, pos.Z))
 					moveCapsule(model, startCFrame, endCFrame)
 				else
 					warn(string.format("[ConveyorService] CreateConveyorCapsule returned nil for: %s", capsuleInfo.Name))
@@ -191,7 +195,6 @@ function ConveyorService:StartForPlayer(player, homeSlot)
 			end
 			task.wait(GameConfig.ConveyorSpawnInterval)
 		end
-		print(string.format("[ConveyorService] Spawn loop ended for userId=%d, total spawned=%d", player.UserId, spawnCount))
 	end)
 end
 

@@ -1,0 +1,598 @@
+--[[
+脚本名称: FigurineService
+脚本类型: ModuleScript
+脚本位置: ServerScriptService/Server/FigurineService
+版本: V1.6
+职责: 手办抽取/摆放/待领取产币/信息展示
+]]
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
+
+local GameConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("GameConfig"))
+local FigurineConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("FigurineConfig"))
+local FigurinePoolConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("FigurinePoolConfig"))
+
+local DataService = require(script.Parent:WaitForChild("DataService"))
+
+local Modules = ReplicatedStorage:WaitForChild("Modules")
+local FormatHelper = require(Modules:WaitForChild("FormatHelper"))
+
+local FigurineService = {}
+FigurineService.__index = FigurineService
+
+local rng = Random.new()
+local playerStates = {} -- [userId] = {Active, LoopStarted, UiEntries, ButtonConnections, TouchStates, PlatformTweens}
+
+local CLAIM_COOLDOWN = 0.5
+local PLATFORM_MIN_Y = 1
+local PLATFORM_MAX_Y = 5
+local UI_UPDATE_INTERVAL = 1
+
+local function formatHomeName(index)
+	return string.format("%s%02d", GameConfig.HomeSlotPrefix, index)
+end
+
+local function getHomeFolder(player)
+	local homeRoot = Workspace:FindFirstChild(GameConfig.HomeFolderName)
+	if not homeRoot then
+		return nil
+	end
+	local slotIndex = player:GetAttribute("HomeSlot")
+	if not slotIndex then
+		return nil
+	end
+	return homeRoot:FindFirstChild(formatHomeName(slotIndex))
+end
+
+local function getFigurineFolder(homeFolder)
+	if not homeFolder then
+		return nil
+	end
+	local folder = homeFolder:FindFirstChild("Figurines")
+	if not folder then
+		folder = Instance.new("Folder")
+		folder.Name = "Figurines"
+		folder.Parent = homeFolder
+	end
+	return folder
+end
+
+local function resolveShowcaseNode(homeFolder, path)
+	if not homeFolder or type(path) ~= "string" or path == "" then
+		return nil
+	end
+
+	local current = homeFolder
+	for _, segment in ipairs(string.split(path, "/")) do
+		if segment ~= "" then
+			current = current:FindFirstChild(segment)
+			if not current then
+				return nil
+			end
+		end
+	end
+	return current
+end
+
+local function resolvePlatform(homeFolder, path)
+	local node = resolveShowcaseNode(homeFolder, path)
+	if not node then
+		return nil
+	end
+	if node:IsA("BasePart") and node.Name == "Platform" then
+		return node
+	end
+	local platform = node:FindFirstChild("Platform", true)
+	if platform and platform:IsA("BasePart") then
+		return platform
+	end
+	return nil
+end
+
+local function resolveClaimButton(homeFolder, path)
+	if not homeFolder or type(path) ~= "string" or path == "" then
+		return nil
+	end
+	local root = homeFolder:FindFirstChild("ClaimButton")
+	if not root then
+		return nil
+	end
+	local current = root
+	for _, segment in ipairs(string.split(path, "/")) do
+		if segment ~= "" then
+			current = current:FindFirstChild(segment)
+			if not current then
+				return nil
+			end
+		end
+	end
+	if current:IsA("BasePart") then
+		return current
+	end
+	return nil
+end
+
+local function resolveCFrame(node)
+	if node:IsA("BasePart") then
+		return node.CFrame
+	end
+	if node:IsA("Attachment") then
+		return node.WorldCFrame
+	end
+	if node:IsA("Model") then
+		return node:GetPivot()
+	end
+	return nil
+end
+
+local function setAnchored(model, anchored)
+	if model:IsA("BasePart") then
+		model.Anchored = anchored
+	end
+	for _, obj in ipairs(model:GetDescendants()) do
+		if obj:IsA("BasePart") then
+			obj.Anchored = anchored
+		end
+	end
+end
+
+local function getPrimaryPart(model)
+	if model:IsA("BasePart") then
+		return model
+	end
+	if model:IsA("Model") then
+		return model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart", true)
+	end
+	return nil
+end
+
+local function hasFigurineModel(folder, figurineId, ownerUserId)
+	if not folder then
+		return false
+	end
+	for _, child in ipairs(folder:GetChildren()) do
+		if child:GetAttribute("FigurineId") == figurineId and child:GetAttribute("OwnerUserId") == ownerUserId then
+			return true
+		end
+	end
+	return false
+end
+
+local function getPlayerState(player)
+	local state = playerStates[player.UserId]
+	if not state then
+		state = {
+			Active = true,
+			LoopStarted = false,
+			UiEntries = {},
+			ButtonConnections = {},
+			TouchStates = {},
+			PlatformTweens = {},
+		}
+		playerStates[player.UserId] = state
+	end
+	return state
+end
+
+local function getPlayerFromHit(hit)
+	if not hit then
+		return nil
+	end
+	local character = hit:FindFirstAncestorOfClass("Model")
+	if not character then
+		return nil
+	end
+	return Players:GetPlayerFromCharacter(character)
+end
+
+local function getFigurineRate(figurineInfo)
+	return tonumber(figurineInfo.BaseRate) or 0
+end
+
+local function getPendingCoins(player, figurineId, rate)
+	local state = DataService:EnsureFigurineState(player, figurineId)
+	if not state then
+		return 0
+	end
+	local lastCollect = tonumber(state.LastCollectTime) or os.time()
+	local elapsed = math.max(0, os.time() - lastCollect)
+	local capSeconds = tonumber(GameConfig.FigurineCoinCapSeconds) or 0
+	if capSeconds > 0 then
+		elapsed = math.min(elapsed, capSeconds)
+	end
+	local pending = rate * elapsed
+	if pending < 0 then
+		pending = 0
+	end
+	return math.floor(pending + 0.0001)
+end
+
+local function updateMoneyLabel(player, figurineId, entry)
+	if not entry or not entry.MoneyLabel or not entry.MoneyLabel.Parent then
+		return
+	end
+	local rate = entry.Rate or 0
+	local pending = getPendingCoins(player, figurineId, rate)
+	local pendingText = FormatHelper.FormatCoinsShort(pending, true)
+	local rateText = FormatHelper.FormatCoinsShort(rate, true)
+	entry.MoneyLabel.Text = string.format("%s/(%s/S)", pendingText, rateText)
+end
+
+local function attachInfoGui(platform)
+	local infoFolder = ReplicatedStorage:FindFirstChild("InfoPart")
+	if not infoFolder then
+		warn("[FigurineService] InfoPart missing in ReplicatedStorage")
+		return nil
+	end
+	local template = infoFolder:FindFirstChild("Info")
+	if not template or not template:IsA("SurfaceGui") then
+		warn("[FigurineService] Info SurfaceGui missing")
+		return nil
+	end
+
+	local existing = platform:FindFirstChild("Info")
+	if existing and existing:IsA("SurfaceGui") then
+		existing.Face = Enum.NormalId.Front
+		return existing
+	end
+
+	local gui = template:Clone()
+	gui.Name = "Info"
+	gui.Face = Enum.NormalId.Front
+	gui.Parent = platform
+	return gui
+end
+
+local function registerUiEntry(player, figurineInfo, platform, infoGui)
+	local nameLabel
+	local moneyLabel
+	if infoGui then
+		nameLabel = infoGui:FindFirstChild("Name", true)
+		moneyLabel = infoGui:FindFirstChild("Money", true)
+		if nameLabel and nameLabel:IsA("TextLabel") then
+			nameLabel.Text = figurineInfo.Name
+		end
+	end
+	local entry = {
+		Platform = platform,
+		InfoGui = infoGui,
+		NameLabel = nameLabel,
+		MoneyLabel = moneyLabel,
+		Rate = getFigurineRate(figurineInfo),
+	}
+	local state = getPlayerState(player)
+	state.UiEntries[figurineInfo.Id] = entry
+	updateMoneyLabel(player, figurineInfo.Id, entry)
+end
+
+local function setupShowcasePlatform(player, figurineInfo, animate)
+	local homeFolder = getHomeFolder(player)
+	if not homeFolder then
+		return
+	end
+	local platform = resolvePlatform(homeFolder, figurineInfo.ShowcasePath)
+	if not platform then
+		warn(string.format("[FigurineService] Platform missing: %s", tostring(figurineInfo.ShowcasePath)))
+		return
+	end
+
+	local function attach()
+		local infoGui = attachInfoGui(platform)
+		registerUiEntry(player, figurineInfo, platform, infoGui)
+	end
+
+	if animate then
+		local state = getPlayerState(player)
+		local startSize = Vector3.new(platform.Size.X, PLATFORM_MIN_Y, platform.Size.Z)
+		local targetSize = Vector3.new(platform.Size.X, PLATFORM_MAX_Y, platform.Size.Z)
+		platform.Size = startSize
+		local tween = TweenService:Create(platform, TweenInfo.new(2, Enum.EasingStyle.Linear), { Size = targetSize })
+		state.PlatformTweens[platform] = tween
+		tween.Completed:Connect(function(playbackState)
+			state.PlatformTweens[platform] = nil
+			if playbackState ~= Enum.PlaybackState.Completed then
+				return
+			end
+			local currentState = playerStates[player.UserId]
+			if not currentState or not currentState.Active then
+				platform.Size = Vector3.new(platform.Size.X, PLATFORM_MIN_Y, platform.Size.Z)
+				return
+			end
+			attach()
+		end)
+		tween:Play()
+	else
+		platform.Size = Vector3.new(platform.Size.X, PLATFORM_MAX_Y, platform.Size.Z)
+		attach()
+	end
+end
+
+local function resetShowcasePlatform(entry)
+	if not entry or not entry.Platform then
+		return
+	end
+	local platform = entry.Platform
+	if not platform.Parent then
+		return
+	end
+	local infoGui = entry.InfoGui or platform:FindFirstChild("Info")
+	if infoGui and infoGui:IsA("SurfaceGui") then
+		infoGui:Destroy()
+	end
+	platform.Size = Vector3.new(platform.Size.X, PLATFORM_MIN_Y, platform.Size.Z)
+end
+
+local function bindClaimButton(player, figurineInfo)
+	local homeFolder = getHomeFolder(player)
+	if not homeFolder then
+		return
+	end
+	local button = resolveClaimButton(homeFolder, figurineInfo.ClaimButtonPath)
+	if not button then
+		warn(string.format("[FigurineService] ClaimButton missing: %s", tostring(figurineInfo.ClaimButtonPath)))
+		return
+	end
+
+	local state = getPlayerState(player)
+	if state.ButtonConnections[button] then
+		return
+	end
+
+	local touchState = {
+		IsTouching = false,
+		LastTrigger = 0,
+		TouchingParts = {},
+	}
+	state.TouchStates[button] = touchState
+
+	local function onTouched(hit)
+		local hitPlayer = getPlayerFromHit(hit)
+		if hitPlayer ~= player then
+			return
+		end
+		if hit and not touchState.TouchingParts[hit] then
+			touchState.TouchingParts[hit] = true
+		end
+		if touchState.IsTouching then
+			return
+		end
+		local now = os.clock()
+		if now - touchState.LastTrigger < CLAIM_COOLDOWN then
+			touchState.IsTouching = true
+			return
+		end
+		touchState.IsTouching = true
+		touchState.LastTrigger = now
+		FigurineService:CollectCoins(player, figurineInfo.Id)
+		local entry = state.UiEntries[figurineInfo.Id]
+		updateMoneyLabel(player, figurineInfo.Id, entry)
+	end
+
+	local function onTouchEnded(hit)
+		local hitPlayer = getPlayerFromHit(hit)
+		if hitPlayer ~= player then
+			return
+		end
+		if hit then
+			touchState.TouchingParts[hit] = nil
+		end
+		if next(touchState.TouchingParts) == nil then
+			touchState.IsTouching = false
+		end
+	end
+
+	local connTouched = button.Touched:Connect(onTouched)
+	local connEnded = button.TouchEnded:Connect(onTouchEnded)
+	state.ButtonConnections[button] = { connTouched, connEnded }
+end
+
+local function placeFigurineModel(player, figurineInfo)
+	local homeFolder = getHomeFolder(player)
+	if not homeFolder then
+		return false
+	end
+	local targetNode = resolveShowcaseNode(homeFolder, figurineInfo.ShowcasePath)
+	if not targetNode then
+		warn(string.format("[FigurineService] Showcase path missing: %s", tostring(figurineInfo.ShowcasePath)))
+		return false
+	end
+
+	local targetCFrame = resolveCFrame(targetNode)
+	if not targetCFrame then
+		warn(string.format("[FigurineService] Showcase node invalid: %s", targetNode.Name))
+		return false
+	end
+
+	local figurineFolder = getFigurineFolder(homeFolder)
+	if hasFigurineModel(figurineFolder, figurineInfo.Id, player.UserId) then
+		return false
+	end
+
+	local modelRoot = ReplicatedStorage:WaitForChild("LBB")
+	local source = modelRoot:FindFirstChild(figurineInfo.ModelName)
+	if not source then
+		warn(string.format("[FigurineService] Figurine model missing: %s", figurineInfo.ModelName))
+		return false
+	end
+
+	local model = source:Clone()
+	model.Name = string.format("Figurine_%d", figurineInfo.Id)
+	model:SetAttribute("FigurineId", figurineInfo.Id)
+	model:SetAttribute("FigurineName", figurineInfo.Name)
+	model:SetAttribute("Quality", figurineInfo.Quality)
+	model:SetAttribute("Rarity", figurineInfo.Rarity)
+	model:SetAttribute("OwnerUserId", player.UserId)
+
+	local primary = getPrimaryPart(model)
+	if model:IsA("Model") and not model.PrimaryPart and primary then
+		model.PrimaryPart = primary
+	end
+	if not primary then
+		warn("[FigurineService] Figurine model missing BasePart")
+		model:Destroy()
+		return false
+	end
+
+	setAnchored(model, true)
+	model:PivotTo(targetCFrame)
+	model.Parent = figurineFolder
+	return true
+end
+
+local function pickRandomFigurine(poolId)
+	local pool = FigurinePoolConfig.GetPool(poolId)
+	if not pool then
+		warn(string.format("[FigurineService] Pool not found: %s", tostring(poolId)))
+		return nil
+	end
+
+	local totalWeight = 0
+	for _, entry in ipairs(pool) do
+		local weight = entry.Weight or 0
+		if weight > 0 then
+			totalWeight += weight
+		end
+	end
+	if totalWeight <= 0 then
+		return nil
+	end
+
+	local roll = rng:NextNumber(0, totalWeight)
+	local acc = 0
+	for _, entry in ipairs(pool) do
+		local weight = entry.Weight or 0
+		if weight > 0 then
+			acc += weight
+			if roll <= acc then
+				return entry.FigurineId
+			end
+		end
+	end
+
+	local lastEntry = pool[#pool]
+	return lastEntry and lastEntry.FigurineId or nil
+end
+
+local function startUiLoop(player, state)
+	if state.LoopStarted then
+		return
+	end
+	state.LoopStarted = true
+
+	task.spawn(function()
+		while state.Active and player.Parent do
+			for figurineId, entry in pairs(state.UiEntries) do
+				if not entry.Platform or not entry.Platform.Parent then
+					state.UiEntries[figurineId] = nil
+				else
+					updateMoneyLabel(player, figurineId, entry)
+				end
+			end
+			task.wait(UI_UPDATE_INTERVAL)
+		end
+	end)
+end
+
+function FigurineService:CollectCoins(player, figurineId)
+	local figurineInfo = FigurineConfig.GetById(figurineId)
+	if not figurineInfo then
+		return 0
+	end
+	local rate = getFigurineRate(figurineInfo)
+	local pending = getPendingCoins(player, figurineId, rate)
+	if pending <= 0 then
+		return 0
+	end
+	DataService:AddCoins(player, pending)
+	DataService:SetFigurineLastCollectTime(player, figurineId, os.time())
+	return pending
+end
+
+function FigurineService:BindPlayer(player)
+	local data = DataService:GetData(player)
+	if not data then
+		return
+	end
+
+	local state = getPlayerState(player)
+
+	for figurineId, owned in pairs(data.Figurines) do
+		if owned then
+			local info = FigurineConfig.GetById(figurineId)
+			if info then
+				DataService:EnsureFigurineState(player, figurineId)
+				placeFigurineModel(player, info)
+				setupShowcasePlatform(player, info, false)
+				bindClaimButton(player, info)
+			end
+		end
+	end
+
+	startUiLoop(player, state)
+end
+
+function FigurineService:UnbindPlayer(player)
+	local state = playerStates[player.UserId]
+	if state then
+		state.Active = false
+		for _, tween in pairs(state.PlatformTweens) do
+			tween:Cancel()
+		end
+		for _, entry in pairs(state.UiEntries) do
+			resetShowcasePlatform(entry)
+		end
+		for _, conns in pairs(state.ButtonConnections) do
+			for _, conn in ipairs(conns) do
+				conn:Disconnect()
+			end
+		end
+		playerStates[player.UserId] = nil
+	end
+
+	local homeFolder = getHomeFolder(player)
+	if not homeFolder then
+		return
+	end
+	local figurineFolder = homeFolder:FindFirstChild("Figurines")
+	if figurineFolder then
+		for _, child in ipairs(figurineFolder:GetChildren()) do
+			if child:GetAttribute("OwnerUserId") == player.UserId then
+				child:Destroy()
+			end
+		end
+	end
+end
+
+function FigurineService:GrantFromCapsule(player, capsuleInfo)
+	if not capsuleInfo or not capsuleInfo.PoolId then
+		warn("[FigurineService] Capsule missing PoolId")
+		return nil, false
+	end
+
+	local figurineId = pickRandomFigurine(capsuleInfo.PoolId)
+	if not figurineId then
+		warn("[FigurineService] pickRandomFigurine returned nil")
+		return nil, false
+	end
+
+	local figurineInfo = FigurineConfig.GetById(figurineId)
+	if not figurineInfo then
+		warn(string.format("[FigurineService] Figurine config missing: %s", tostring(figurineId)))
+		return nil, false
+	end
+
+	local added = DataService:AddFigurine(player, figurineId)
+	if added then
+		DataService:EnsureFigurineState(player, figurineId)
+		placeFigurineModel(player, figurineInfo)
+		setupShowcasePlatform(player, figurineInfo, true)
+		bindClaimButton(player, figurineInfo)
+	end
+
+	return figurineInfo, added
+end
+
+return FigurineService

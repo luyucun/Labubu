@@ -230,4 +230,76 @@ Id	盲盒名字	盲盒品质	盲盒稀有度	盲盒模型名字	盲盒价格	开
 
 5.手办获得后，立刻开始不断产出金币
 
-这个版本目前只开发到上述内容即可，剩下的内容我们下个版本继续做
+这个版本目前只开发到上述内容即可，剩下的内容我们下个版本继续做，抽出相同的bubu先不处理，后续我们做升级逻辑，这个版本先不处理
+
+
+策划文档V1.6 关于金币产出/金币获取/金币产出上限
+
+概述：现在的金币产出都是自动增加到玩家账户的，我希望的是，玩家能够通过手动操作领取金币而不是自动发放
+
+详细规则：
+
+1.手办获得后，产出的金币，积累在自身上，不是直接添加的玩家的账户
+2.玩家需要通过碰撞手办对应的领取按钮模型，才能领取金币完成。每个手办都有一个单独对应的领取按钮，在手办表中配置路径即可
+3.金币产出上限按时间累计，默认最多累计3小时（10800秒），超过3小时不领取就暂停产出，领取后重新开始累计
+
+举例：某个手办产出速度是10金币每秒，那么1分钟累计产出了600金币，这些金币都是待领取状态，玩家触碰这个手办对应的领取按钮，才立刻把待领取的金币领取到自己账户
+
+关于领取按钮的路径：
+
+1.我的每个家园中，都有一套领取按钮模型，我们接下来以Player01的家园为例来进行需求讲解：
+    a.Workspace - Home - Player01 - ClaimButton - ButtonBlue - Button1这是其中一个按钮的路径，Button1是一个Part，玩家触碰这个part即可触发对应手办的金币领取。注意这里要做触碰限制，比如0.5秒内最多触发一次领取，并且持续触碰的情况下只算触碰了一次，比如玩家站在这个part上，就算只触发1次，必须离开再过来，才算触碰第二次
+    b.我在每个手办的触碰按钮字段下配置对应的领取按钮的路径，我的配置路径会配置到ClaimButton下的路径，比如我配置：ButtonBlue/Button1这个按钮就是去按Workspace - Home - Player01 - ClaimButton - ButtonBlue - Button1这个路径去找这个按钮
+
+更新我的手办配置表为：
+
+id	手办名字	金币基础产速	品质	稀有度	模型资源	对应展台路径	对应领取按钮路径
+10001	绿叶布布1	10	1	1	LBB01	ShowCase/Green/Position1	ButtonGreen/Button1
+10002	绿叶布布2	12	1	1	LBB01	ShowCase/Green/Position2	ButtonGreen/Button2
+10003	绿叶布布3	14	1	1	LBB01	ShowCase/Green/Position3	ButtonGreen/Button3
+10004	绿叶布布4	16	1	1	LBB01	ShowCase/Green/Position4	ButtonGreen/Button4
+10005	绿叶布布5	18	1	1	LBB01	ShowCase/Green/Position5	ButtonGreen/Button5
+10006	绿叶布布6	20	1	1	LBB01	ShowCase/Green/Position6	ButtonGreen/Button6
+10007	绿叶布布7	22	1	1	LBB01	ShowCase/Green/Position7	ButtonGreen/Button7
+10008	绿叶布布8	24	1	1	LBB01	ShowCase/Green/Position8	ButtonGreen/Button8
+10009	绿叶布布9	26	1	1	LBB01	ShowCase/Green/Position9	ButtonGreen/Button9
+20001	水布布1	50	2	1	LBB01	ShowCase/Blue/Position1	ButtonBlue/Button1
+20002	水布布2	55	2	1	LBB01	ShowCase/Blue/Position2	ButtonBlue/Button2
+20003	水布布3	60	2	1	LBB01	ShowCase/Blue/Position3	ButtonBlue/Button3
+20004	水布布4	65	2	1	LBB01	ShowCase/Blue/Position4	ButtonBlue/Button4
+20005	水布布5	70	2	1	LBB01	ShowCase/Blue/Position5	ButtonBlue/Button5
+20006	水布布6	75	2	1	LBB01	ShowCase/Blue/Position6	ButtonBlue/Button6
+20007	水布布7	80	2	1	LBB01	ShowCase/Blue/Position7	ButtonBlue/Button7
+20008	水布布8	85	2	1	LBB01	ShowCase/Blue/Position8	ButtonBlue/Button8
+20009	水布布9	90	2	1	LBB01	ShowCase/Blue/Position9	ButtonBlue/Button9
+
+
+关于手办信息的显示：
+
+我们之前配置了每个手办对应的展台模型路径，在每个展台模型路径下，均有一个叫Platform的Part，初始手办未获得时，设定Platform的Size为7, 1, 7，当手办获得后，需要在展台上出现时，需要把Platform的Size设定为：7, 5, 7
+在手办出现的过程中，Platform的Size变化时，我们需要一个变化过程，2秒内，size 的Y轴尺寸从1变到5
+
+关于ui信息的展示：
+当Platform尺寸变化结束后，需要在Platform的上复制一份手办信息，具体逻辑是，去ReplicatedStorage - InfoPart下寻找一个叫Info的SurfaceGui并复制，复制到Platform上，出现的Face是Front
+
+Info - Name是一个textlabel，用于展示手办的名字，Info - Money是一个Textlabel，用于展示手办的金币相关信息，具体格式是：$xxx/（$yyy/S），XXX是已经积累的金币数值，要实时变化，领取后清零，yyy是当前的金币产出速度数值，也要随着手办的升级来实时变化（升级逻辑后面做这里先留好接口）
+
+我们游戏中的所有的金币数值显示，都需要遵循一套大数值显示规则，具体规则可以在我另一个项目中参考，项目路径是：D:\RobloxGame\Prison\prisongame，使用一样的规则即可
+
+
+策划文档V1.7  关于一些数据统计
+
+我们需要新增多个统计数据维度：
+
+1.玩家历史总共的游戏时间，只要玩家在线，就自动增加这个时间，实时更新，玩家多次游玩后，数据都是不断增加的，需要作为玩家的永久数据去储存
+2.玩家总共开启过的盲盒数量：玩家每开一个盲盒，就自动数值+1
+3.玩家每个Id的盲盒的总开启数量也需要记录，上面一条是总数，这里的是每个ID盲盒的开启数量
+4.玩家的当前总的金币产出速度，就是所有的手办的当前的产出速度总和
+
+我们需要把以上部分信息进行展示，暂时我做了个测试ui，用来暂时性的承载这些信息的显示，后面我会做正式的ui来显示界面
+
+StarterGui -  TestInfo - Frame - CapsuleTotal，这是个textlabel，用于显示玩家的总共历史开启的盲盒总数
+StarterGui -  TestInfo - Frame - OutoutSpeed，这是个textlabel，用于显示玩家当前的总产出速度，格式是：$xxx/S ，xxx是速度
+StarterGui -  TestInfo - Frame - TimeTotal，这是个textlabel，用于显示玩家的总的游戏时间，格式xx:YY:ZZ,分别代表小时/分钟/秒
+
+以上多个数据均是需要进行记录的数据，作为永久数据进行储存

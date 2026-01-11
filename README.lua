@@ -5,7 +5,7 @@ README:
 1.如果你要新增脚本文件，要在开头标注清楚脚本名字/脚本类型/脚本放置的位置，注意注释需要用中文，脚本名用英文
 2.脚本类型必须写具体类型（ModuleScript/LocalScript/Script），不要写中文或额外说明
 3.脚本放置位置必须写 Roblox Studio 内的位置（例如 ReplicatedStorage/Config/GameConfig）
-4.不要在当前目录下创建更深的文件夹，所有新增文件放在 D:\RobloxGame\Labubu 根目录
+4.不要在当前目录下创建更深的文件夹，所有新增文件放在 D:\RobloxGame\Labubu\Labubu 根目录
 5.Studio中允许按架构建立文件夹，脚本文件由我手动同步到对应位置
 6.如果是客户端脚本，尽量统一放置在StarterPlayerScripts中
 7.全程使用中文跟我对话

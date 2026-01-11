@@ -2,7 +2,7 @@
 脚本名称: CapsuleConfig
 脚本类型: ModuleScript
 脚本位置: ReplicatedStorage/Config/CapsuleConfig
-版本: V1.3.1
+版本: V1.5
 职责: 盲盒配置
 ]]
 
@@ -17,6 +17,7 @@ CapsuleConfig.Capsules = {
 		ModelName = "Leaf",
 		Price = 120,
 		OpenSeconds = 10,
+		PoolId = 9001,
 	},
 	{
 		Id = 1002,
@@ -26,6 +27,7 @@ CapsuleConfig.Capsules = {
 		ModelName = "Water",
 		Price = 140,
 		OpenSeconds = 15,
+		PoolId = 9002,
 	},
 	{
 		Id = 1003,
@@ -35,6 +37,7 @@ CapsuleConfig.Capsules = {
 		ModelName = "Lunar",
 		Price = 160,
 		OpenSeconds = 20,
+		PoolId = 9001,
 	},
 	{
 		Id = 1004,
@@ -44,6 +47,7 @@ CapsuleConfig.Capsules = {
 		ModelName = "Solar",
 		Price = 180,
 		OpenSeconds = 25,
+		PoolId = 9002,
 	},
 	{
 		Id = 1005,
@@ -53,6 +57,7 @@ CapsuleConfig.Capsules = {
 		ModelName = "Flame",
 		Price = 200,
 		OpenSeconds = 30,
+		PoolId = 9001,
 	},
 	{
 		Id = 1006,
@@ -62,6 +67,7 @@ CapsuleConfig.Capsules = {
 		ModelName = "Heart",
 		Price = 220,
 		OpenSeconds = 35,
+		PoolId = 9002,
 	},
 	{
 		Id = 1007,
@@ -71,6 +77,7 @@ CapsuleConfig.Capsules = {
 		ModelName = "Celestial",
 		Price = 240,
 		OpenSeconds = 40,
+		PoolId = 9002,
 	},
 }
 

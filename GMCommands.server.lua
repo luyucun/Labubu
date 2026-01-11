@@ -9,6 +9,8 @@
 local Players = game:GetService("Players")
 
 local DataService = require(script.Parent:WaitForChild("DataService"))
+local EggService = require(script.Parent:WaitForChild("EggService"))
+local FigurineService = require(script.Parent:WaitForChild("FigurineService"))
 
 local commands = {}
 
@@ -45,6 +47,13 @@ end)
 
 registerCommand("clearcoins", "清空自己金币，格式: /clearcoins", function(player, args)
 	DataService:SetCoins(player, 0)
+end)
+
+registerCommand("resetdata", "清空自己所有数据，格式: /resetdata", function(player, args)
+	DataService:ResetPlayerData(player)
+	EggService:ClearPlayerState(player)
+	FigurineService:UnbindPlayer(player)
+	FigurineService:BindPlayer(player)
 end)
 
 registerCommand("gmhelp", "查看GM命令列表，格式: /gmhelp", function(player, args)
