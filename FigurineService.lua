@@ -24,7 +24,7 @@ local FigurineService = {}
 FigurineService.__index = FigurineService
 
 local rng = Random.new()
-local playerStates = {} -- [userId] = {Active, LoopStarted, UiEntries, ButtonConnections, TouchStates, PlatformTweens}
+local playerStates = {} -- [userId] = {Active, LoopStarted, UiEntries, ButtonConnections, TouchStates, PlatformTweens, ModelTweens}
 
 local CLAIM_COOLDOWN = 0.5
 local PLATFORM_MIN_Y = 1
@@ -128,6 +128,11 @@ local function resolveCFrame(node)
 	return nil
 end
 
+local function getBottomAlignedCFrame(baseCFrame, baseSizeY, targetSizeY)
+	local deltaY = (targetSizeY - baseSizeY) / 2
+	return baseCFrame * CFrame.new(0, deltaY, 0)
+end
+
 local function setAnchored(model, anchored)
 	if model:IsA("BasePart") then
 		model.Anchored = anchored
@@ -149,6 +154,70 @@ local function getPrimaryPart(model)
 	return nil
 end
 
+local function getModelBounds(model)
+	local pivot = model:GetPivot()
+	local bboxCFrame, bboxSize = model:GetBoundingBox()
+	local offsetWorld = bboxCFrame.Position - pivot.Position
+	local offsetLocal = pivot:VectorToObjectSpace(offsetWorld)
+	return bboxSize, offsetLocal
+end
+
+local function getRotationOnly(cframe)
+	return CFrame.fromMatrix(Vector3.zero, cframe.RightVector, cframe.UpVector, cframe.LookVector)
+end
+
+local function getFigurinePivotCFrame(platformCFrame, platformSizeY, modelSize, modelOffset, modelRotation)
+	local topY = platformCFrame.Position.Y + platformSizeY / 2
+	local targetCenter = Vector3.new(platformCFrame.Position.X, topY + modelSize.Y / 2, platformCFrame.Position.Z)
+	local offsetWorld = modelRotation and modelRotation:VectorToWorldSpace(modelOffset) or modelOffset
+	local pivotPos = targetCenter - offsetWorld
+	if modelRotation then
+		return CFrame.new(pivotPos) * modelRotation
+	end
+	return CFrame.new(pivotPos)
+end
+
+local function createModelTween(model, startCFrame, targetCFrame, duration, state)
+	local pivotValue = Instance.new("CFrameValue")
+	pivotValue.Value = startCFrame
+	model:PivotTo(startCFrame)
+
+	local conn
+	local cleaned = false
+	local function cleanup()
+		if cleaned then
+			return
+		end
+		cleaned = true
+		if conn then
+			conn:Disconnect()
+			conn = nil
+		end
+		if pivotValue then
+			pivotValue:Destroy()
+			pivotValue = nil
+		end
+	end
+
+	conn = pivotValue.Changed:Connect(function(value)
+		if model.Parent then
+			model:PivotTo(value)
+		end
+	end)
+
+	local tween = TweenService:Create(pivotValue, TweenInfo.new(duration, Enum.EasingStyle.Linear), { Value = targetCFrame })
+	tween.Completed:Connect(function()
+		cleanup()
+		if state and state.ModelTweens then
+			state.ModelTweens[model] = nil
+		end
+	end)
+	if state and state.ModelTweens then
+		state.ModelTweens[model] = { Tween = tween, Cleanup = cleanup }
+	end
+	tween:Play()
+end
+
 local function hasFigurineModel(folder, figurineId, ownerUserId)
 	if not folder then
 		return false
@@ -161,6 +230,18 @@ local function hasFigurineModel(folder, figurineId, ownerUserId)
 	return false
 end
 
+local function findFigurineModel(folder, figurineId, ownerUserId)
+	if not folder then
+		return nil
+	end
+	for _, child in ipairs(folder:GetChildren()) do
+		if child:GetAttribute("FigurineId") == figurineId and child:GetAttribute("OwnerUserId") == ownerUserId then
+			return child
+		end
+	end
+	return nil
+end
+
 local function getPlayerState(player)
 	local state = playerStates[player.UserId]
 	if not state then
@@ -171,6 +252,7 @@ local function getPlayerState(player)
 			ButtonConnections = {},
 			TouchStates = {},
 			PlatformTweens = {},
+			ModelTweens = {},
 		}
 		playerStates[player.UserId] = state
 	end
@@ -278,6 +360,26 @@ local function setupShowcasePlatform(player, figurineInfo, animate)
 		warn(string.format("[FigurineService] Platform missing: %s", tostring(figurineInfo.ShowcasePath)))
 		return
 	end
+	local figurineFolder = getFigurineFolder(homeFolder)
+	local model = findFigurineModel(figurineFolder, figurineInfo.Id, player.UserId)
+	local modelSize
+	local modelOffset
+	local modelRotation
+	if model then
+		modelSize, modelOffset = getModelBounds(model)
+		local baseRotation = model:GetAttribute("BaseRotation")
+		if typeof(baseRotation) ~= "CFrame" then
+			local modelRoot = ReplicatedStorage:FindFirstChild("LBB")
+			local source = modelRoot and figurineInfo and modelRoot:FindFirstChild(figurineInfo.ModelName)
+			local sourceCFrame = source and resolveCFrame(source)
+			if sourceCFrame then
+				baseRotation = getRotationOnly(sourceCFrame)
+			else
+				baseRotation = getRotationOnly(model:GetPivot())
+			end
+		end
+		modelRotation = getRotationOnly(platform.CFrame) * baseRotation
+	end
 
 	local function attach()
 		local infoGui = attachInfoGui(platform)
@@ -286,10 +388,21 @@ local function setupShowcasePlatform(player, figurineInfo, animate)
 
 	if animate then
 		local state = getPlayerState(player)
-		local startSize = Vector3.new(platform.Size.X, PLATFORM_MIN_Y, platform.Size.Z)
-		local targetSize = Vector3.new(platform.Size.X, PLATFORM_MAX_Y, platform.Size.Z)
+		local duration = 2
+		local baseCFrame = platform.CFrame
+		local baseSize = platform.Size
+		local startSize = Vector3.new(baseSize.X, PLATFORM_MIN_Y, baseSize.Z)
+		local targetSize = Vector3.new(baseSize.X, PLATFORM_MAX_Y, baseSize.Z)
+		local startCFrame = getBottomAlignedCFrame(baseCFrame, baseSize.Y, startSize.Y)
+		local targetCFrame = getBottomAlignedCFrame(baseCFrame, baseSize.Y, targetSize.Y)
 		platform.Size = startSize
-		local tween = TweenService:Create(platform, TweenInfo.new(2, Enum.EasingStyle.Linear), { Size = targetSize })
+		platform.CFrame = startCFrame
+		if model and modelSize and modelOffset then
+			local startModelCFrame = getFigurinePivotCFrame(startCFrame, startSize.Y, modelSize, modelOffset, modelRotation)
+			local targetModelCFrame = getFigurinePivotCFrame(targetCFrame, targetSize.Y, modelSize, modelOffset, modelRotation)
+			createModelTween(model, startModelCFrame, targetModelCFrame, duration, state)
+		end
+		local tween = TweenService:Create(platform, TweenInfo.new(duration, Enum.EasingStyle.Linear), { Size = targetSize, CFrame = targetCFrame })
 		state.PlatformTweens[platform] = tween
 		tween.Completed:Connect(function(playbackState)
 			state.PlatformTweens[platform] = nil
@@ -298,14 +411,26 @@ local function setupShowcasePlatform(player, figurineInfo, animate)
 			end
 			local currentState = playerStates[player.UserId]
 			if not currentState or not currentState.Active then
-				platform.Size = Vector3.new(platform.Size.X, PLATFORM_MIN_Y, platform.Size.Z)
+				local currentCFrame = platform.CFrame
+				local currentSize = platform.Size
+				local minSize = Vector3.new(currentSize.X, PLATFORM_MIN_Y, currentSize.Z)
+				platform.Size = minSize
+				platform.CFrame = getBottomAlignedCFrame(currentCFrame, currentSize.Y, minSize.Y)
 				return
 			end
 			attach()
 		end)
 		tween:Play()
 	else
-		platform.Size = Vector3.new(platform.Size.X, PLATFORM_MAX_Y, platform.Size.Z)
+		local baseCFrame = platform.CFrame
+		local baseSize = platform.Size
+		local targetSize = Vector3.new(baseSize.X, PLATFORM_MAX_Y, baseSize.Z)
+		platform.Size = targetSize
+		platform.CFrame = getBottomAlignedCFrame(baseCFrame, baseSize.Y, targetSize.Y)
+		if model and modelSize and modelOffset then
+			local targetModelCFrame = getFigurinePivotCFrame(platform.CFrame, targetSize.Y, modelSize, modelOffset, modelRotation)
+			model:PivotTo(targetModelCFrame)
+		end
 		attach()
 	end
 end
@@ -322,7 +447,11 @@ local function resetShowcasePlatform(entry)
 	if infoGui and infoGui:IsA("SurfaceGui") then
 		infoGui:Destroy()
 	end
-	platform.Size = Vector3.new(platform.Size.X, PLATFORM_MIN_Y, platform.Size.Z)
+	local baseCFrame = platform.CFrame
+	local baseSize = platform.Size
+	local minSize = Vector3.new(baseSize.X, PLATFORM_MIN_Y, baseSize.Z)
+	platform.Size = minSize
+	platform.CFrame = getBottomAlignedCFrame(baseCFrame, baseSize.Y, minSize.Y)
 end
 
 local function bindClaimButton(player, figurineInfo)
@@ -400,7 +529,8 @@ local function placeFigurineModel(player, figurineInfo)
 		return false
 	end
 
-	local targetCFrame = resolveCFrame(targetNode)
+	local platform = resolvePlatform(homeFolder, figurineInfo.ShowcasePath)
+	local targetCFrame = platform and platform.CFrame or resolveCFrame(targetNode)
 	if not targetCFrame then
 		warn(string.format("[FigurineService] Showcase node invalid: %s", targetNode.Name))
 		return false
@@ -437,7 +567,16 @@ local function placeFigurineModel(player, figurineInfo)
 	end
 
 	setAnchored(model, true)
-	model:PivotTo(targetCFrame)
+	local baseRotation = getRotationOnly(model:GetPivot())
+	model:SetAttribute("BaseRotation", baseRotation)
+	local modelRotation = platform and (getRotationOnly(platform.CFrame) * baseRotation) or baseRotation
+	if platform then
+		local modelSize, modelOffset = getModelBounds(model)
+		local placementCFrame = getFigurinePivotCFrame(platform.CFrame, platform.Size.Y, modelSize, modelOffset, modelRotation)
+		model:PivotTo(placementCFrame)
+	else
+		model:PivotTo(CFrame.new(targetCFrame.Position) * modelRotation)
+	end
 	model.Parent = figurineFolder
 	return true
 end
@@ -540,6 +679,14 @@ function FigurineService:UnbindPlayer(player)
 		state.Active = false
 		for _, tween in pairs(state.PlatformTweens) do
 			tween:Cancel()
+		end
+		for _, entry in pairs(state.ModelTweens) do
+			if entry.Tween then
+				entry.Tween:Cancel()
+			end
+			if entry.Cleanup then
+				entry.Cleanup()
+			end
 		end
 		for _, entry in pairs(state.UiEntries) do
 			resetShowcasePlatform(entry)

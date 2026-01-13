@@ -1,9 +1,9 @@
 ﻿--[[
 游戏架构设计文档
-版本: V1.7
-最后更新: 2026-01-11
+版本: V1.9
+最后更新: 2026-01-12
 ]]
-游戏架构设计 V1.7
+游戏架构设计 V1.9
 
 1. 设计原则
 - 服务端权威：货币、随机、产出、升级、存档都在服务端
@@ -94,7 +94,7 @@ PlayerData
 4. 核心系统职责
 - DataService：会话缓存 + Dirty 标记 + 间隔保存 + BindToClose 兜底，UpdateAsync 持久化，离线结算，统计(在线时长/盲盒开启/总产出速度)
 - GMCommands：GM命令处理（加金币/清金币/命令列表）
-- HomeService：玩家进入创建基地，设置OwnerUserId并缓存节点，维护地板范围/格位信息
+- HomeService：玩家进入创建基地，设置OwnerUserId并缓存节点，维护地板范围/格位信息，更新基地PlayerInfo展示，出生朝向对准ClaimAll
 - ConveyorService：按配置间隔产蛋，服务端生成 EggUid，维护索引/最大蛋数/过期清理
 - EggService：盲盒购买校验、背包管理、放置、倒计时与开盒触发
 - FigurineService：开盒随机手办、展台放置、金币待领取/触碰领取、展台信息UI

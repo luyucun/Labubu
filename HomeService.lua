@@ -2,24 +2,154 @@
 脚本名称: HomeService
 脚本类型: ModuleScript
 脚本位置: ServerScriptService/Server/HomeService
-版本: V1.1
-职责: 家园分配与出生点绑定
+版本: V1.9
+职责: 家园分配与出生点绑定与基地玩家信息展示
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 
 local GameConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("GameConfig"))
+local FormatHelper = require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("FormatHelper"))
 
 local HomeService = {}
 HomeService.__index = HomeService
 
 local homeSlots = {} -- [index] = {Folder, SpawnLocation, OwnerUserId}
 local characterConnections = {} -- [userId] = RBXScriptConnection
+local infoConnections = {} -- [userId] = RBXScriptConnection
 local rng = Random.new()
 
 local function formatHomeName(index)
 	return string.format("%s%02d", GameConfig.HomeSlotPrefix, index)
+end
+
+local function resolvePlayerInfoNodes(homeFolder)
+	if not homeFolder then
+		return nil
+	end
+	local base = homeFolder:FindFirstChild("Base")
+	if not base then
+		return nil
+	end
+	local playerInfo = base:FindFirstChild("PlayerInfo")
+	if not playerInfo then
+		return nil
+	end
+	local billboard = playerInfo:FindFirstChild("BillboardGui")
+	if not billboard then
+		return nil
+	end
+	local bg = billboard:FindFirstChild("Bg")
+	if not bg or not bg:IsA("GuiObject") then
+		return nil
+	end
+	local icon = bg:FindFirstChild("PlayerIcon")
+	if icon and not icon:IsA("ImageLabel") then
+		icon = nil
+	end
+	local nameLabel = bg:FindFirstChild("PlayerName")
+	if nameLabel and not nameLabel:IsA("TextLabel") then
+		nameLabel = nil
+	end
+	local speedLabel = bg:FindFirstChild("Speed")
+	if speedLabel and not speedLabel:IsA("TextLabel") then
+		speedLabel = nil
+	end
+	return bg, icon, nameLabel, speedLabel
+end
+
+local function resolveClaimAllCFrame(homeFolder)
+	if not homeFolder then
+		return nil
+	end
+	local base = homeFolder:FindFirstChild("Base")
+	if not base then
+		return nil
+	end
+	local claimAll = base:FindFirstChild("ClaimAll")
+	if not claimAll then
+		return nil
+	end
+	if claimAll:IsA("BasePart") then
+		return claimAll.CFrame
+	end
+	if claimAll:IsA("Model") then
+		return claimAll:GetPivot()
+	end
+	if claimAll:IsA("Attachment") then
+		return claimAll.WorldCFrame
+	end
+	return nil
+end
+
+local function updateSpeedLabel(player, speedLabel)
+	if not speedLabel or not speedLabel.Parent then
+		return
+	end
+	local speed = tonumber(player:GetAttribute("OutputSpeed")) or 0
+	local speedText = FormatHelper.FormatCoinsShort(speed, true)
+	speedLabel.Text = string.format("%s/S", speedText)
+end
+
+local function applyPlayerInfo(player, slot)
+	if not slot or not slot.Folder then
+		return
+	end
+	local bg, icon, nameLabel, speedLabel = resolvePlayerInfoNodes(slot.Folder)
+	if not bg then
+		warn(string.format("[HomeService] PlayerInfo missing: %s", tostring(slot.Folder.Name)))
+		return
+	end
+
+	if nameLabel then
+		nameLabel.Text = player.Name
+	end
+	if speedLabel then
+		updateSpeedLabel(player, speedLabel)
+	end
+	if icon then
+		icon.Image = ""
+		task.spawn(function()
+			local success, content = pcall(function()
+				return Players:GetUserThumbnailAsync(player.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size180x180)
+			end)
+			if not success then
+				warn(string.format("[HomeService] GetUserThumbnailAsync failed: userId=%d err=%s", player.UserId, tostring(content)))
+				return
+			end
+			if not icon.Parent then
+				return
+			end
+			if slot.OwnerUserId ~= player.UserId then
+				return
+			end
+			icon.Image = content
+		end)
+	end
+
+	bg.Visible = true
+
+	if infoConnections[player.UserId] then
+		infoConnections[player.UserId]:Disconnect()
+		infoConnections[player.UserId] = nil
+	end
+	if speedLabel then
+		infoConnections[player.UserId] = player:GetAttributeChangedSignal("OutputSpeed"):Connect(function()
+			updateSpeedLabel(player, speedLabel)
+		end)
+	end
+end
+
+local function clearPlayerInfo(slot)
+	if not slot or not slot.Folder then
+		return
+	end
+	local bg = resolvePlayerInfoNodes(slot.Folder)
+	if bg then
+		bg.Visible = false
+	end
 end
 
 function HomeService:Init()
@@ -33,6 +163,7 @@ function HomeService:Init()
 				SpawnLocation = spawnLocation,
 				OwnerUserId = nil,
 			}
+			clearPlayerInfo(homeSlots[i])
 		else
 			warn(string.format("HomeService missing folder: %s", formatHomeName(i)))
 		end
@@ -67,6 +198,7 @@ function HomeService:AssignHome(player)
 	setOwnerAttribute(slot, player.UserId)
 	player:SetAttribute("HomeSlot", pickIndex)
 	self:ApplySpawn(player, slot)
+	applyPlayerInfo(player, slot)
 	print(string.format("[HomeService] Assign home: userId=%d slot=%s", player.UserId, formatHomeName(pickIndex)))
 	return slot
 end
@@ -85,6 +217,16 @@ function HomeService:ApplySpawn(player, slot)
 	characterConnections[player.UserId] = player.CharacterAdded:Connect(function(character)
 		local rootPart = character:WaitForChild("HumanoidRootPart", 5)
 		if rootPart then
+			local spawnPos = slot.SpawnLocation.Position + Vector3.new(0, 3, 0)
+			local claimAllCFrame = resolveClaimAllCFrame(slot.Folder)
+			if claimAllCFrame then
+				local targetPos = claimAllCFrame.Position
+				local lookPos = Vector3.new(targetPos.X, spawnPos.Y, targetPos.Z)
+				if (lookPos - spawnPos).Magnitude > 0.05 then
+					rootPart.CFrame = CFrame.lookAt(spawnPos, lookPos)
+					return
+				end
+			end
 			rootPart.CFrame = slot.SpawnLocation.CFrame + Vector3.new(0, 3, 0)
 		end
 	end)
@@ -95,6 +237,7 @@ function HomeService:ReleaseHome(player)
 	for index = 1, GameConfig.HomeSlotCount do
 		local slot = homeSlots[index]
 		if slot and slot.OwnerUserId == userId then
+			clearPlayerInfo(slot)
 			slot.OwnerUserId = nil
 			setOwnerAttribute(slot, nil)
 			break
@@ -104,6 +247,10 @@ function HomeService:ReleaseHome(player)
 	if characterConnections[userId] then
 		characterConnections[userId]:Disconnect()
 		characterConnections[userId] = nil
+	end
+	if infoConnections[userId] then
+		infoConnections[userId]:Disconnect()
+		infoConnections[userId] = nil
 	end
 
 	player.RespawnLocation = nil

@@ -16,6 +16,8 @@
 13.只要玩家在线，这个卡牌产出的金币就可以一直累加，如果玩家离线，那么上线时，需要判断玩家的离线时间，如果超出了最高的产出累计时间，那最多只给最高累计时间的金币，比如每秒产速100金币，最多积累5分钟，玩家离线了3小时，那么上线后玩家最多获得30000金币
 
 
+术语统一：盲盒=蛋=Capsule，手办=Figurine/宠物
+
 正式需求：
 
 策划案V1.1 玩家家园分配与玩家数据架构
@@ -303,3 +305,15 @@ StarterGui -  TestInfo - Frame - OutoutSpeed，这是个textlabel，用于显示
 StarterGui -  TestInfo - Frame - TimeTotal，这是个textlabel，用于显示玩家的总的游戏时间，格式xx:YY:ZZ,分别代表小时/分钟/秒
 
 以上多个数据均是需要进行记录的数据，作为永久数据进行储存
+
+
+策划文档V1.8 关于玩家信息显示
+
+我们需要在玩家的基地显示出来玩家的信息，下面以Player01的家园为例子进行需求说明
+
+1.Workspace - Home - Player01 - Base - PlayerInfo - BillboardGui - Bg - PlayerIcon是一个imagelabel，用于显示这个基地所属玩家的头像
+2.Workspace - Home - Player01 - Base - PlayerInfo - BillboardGui - Bg - PlayerName是一个textlabel，用于显示玩家的名字
+3.Workspace - Home - Player01 - Base - PlayerInfo - BillboardGui - Bg - Speed是一个textlabel，用于显示玩家的当前总产出速度，这个我们已经在上一版做好了功能，显示数值即可，格式是$xxx/S,xxx是产出速度
+
+当玩家离线这个基地释放后，需要将Workspace - Home - Player01 - Base - PlayerInfo - BillboardGui - Bg的Visible属性改成False
+只有有玩家的时候才把Workspace - Home - Player01 - Base - PlayerInfo - BillboardGui - Bg的Visible属性改成true
