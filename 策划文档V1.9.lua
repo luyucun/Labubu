@@ -317,3 +317,14 @@ StarterGui -  TestInfo - Frame - TimeTotal，这是个textlabel，用于显示�
 
 当玩家离线这个基地释放后，需要将Workspace - Home - Player01 - Base - PlayerInfo - BillboardGui - Bg的Visible属性改成False
 只有有玩家的时候才把Workspace - Home - Player01 - Base - PlayerInfo - BillboardGui - Bg的Visible属性改成true
+
+
+策划文档 V1.9 关于镜头聚焦
+
+我希望在玩家开到一个新的手办，触发手办台子升起的时候，有个具体的镜头效果
+
+详细规则：
+
+1.玩家触发新手办升起台子时，需要快速将玩家的镜头移动到正好对准这个台子，此时玩家无法操纵镜头
+2.镜头对准台子等待台子升起完成后，停顿0.5秒，然后将镜头快速重置回玩家的常规镜头视角并解除锁定
+3.镜头从玩家身上移动到目标点时，要快速移动过去，并且有缓动效果，不要硬切，把各个参数都留出来让我调整，并做好参数作用的说明

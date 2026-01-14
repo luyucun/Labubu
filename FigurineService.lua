@@ -635,6 +635,15 @@ local function startUiLoop(player, state)
 	end)
 end
 
+local function triggerCameraFocus(player, figurineId)
+	if not player or not player.Parent then
+		return
+	end
+	player:SetAttribute("CameraFocusFigurineId", figurineId)
+	local seq = tonumber(player:GetAttribute("CameraFocusSeq")) or 0
+	player:SetAttribute("CameraFocusSeq", seq + 1)
+end
+
 function FigurineService:CollectCoins(player, figurineId)
 	local figurineInfo = FigurineConfig.GetById(figurineId)
 	if not figurineInfo then
@@ -737,6 +746,7 @@ function FigurineService:GrantFromCapsule(player, capsuleInfo)
 		placeFigurineModel(player, figurineInfo)
 		setupShowcasePlatform(player, figurineInfo, true)
 		bindClaimButton(player, figurineInfo)
+		triggerCameraFocus(player, figurineId)
 	end
 
 	return figurineInfo, added

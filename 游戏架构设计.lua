@@ -46,6 +46,7 @@ StarterPlayer/StarterPlayerScripts/
 - Client/UIController: 货币、背包、孵化、图鉴UI刷新
 - UI/CoinDisplay: 金币数值显示(MainGui/CoinNum)
 - UI/TestInfoDisplay: 统计测试UI显示
+- Client/CameraFocus: 新手办升台镜头聚焦
 - Client/InteractionController: 点击交互、放置操作、开蛋请求
 - Client/HomeController: 本地展示与提示
 - Client/NetClient: 与服务端通信与数据接收
