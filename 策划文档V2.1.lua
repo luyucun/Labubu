@@ -328,3 +328,257 @@ StarterGui -  TestInfo - Frame - TimeTotal，这是个textlabel，用于显示�
 1.玩家触发新手办升起台子时，需要快速将玩家的镜头移动到正好对准这个台子，此时玩家无法操纵镜头
 2.镜头对准台子等待台子升起完成后，停顿0.5秒，然后将镜头快速重置回玩家的常规镜头视角并解除锁定
 3.镜头从玩家身上移动到目标点时，要快速移动过去，并且有缓动效果，不要硬切，把各个参数都留出来让我调整，并做好参数作用的说明
+
+
+策划文档V2.0  手办升级
+
+1.手办可以通过消耗同Id的手办来进行升级
+2.一个同id 的手办相当于1点经验值，每级升至下一级所需要消耗的经验点数不同，走经验表进行配置
+3.所有的手办都使用同一套升级表
+
+我的升级表配置如下
+
+等级	升至下级所需经验值
+1	2
+2	4
+3	8
+4	16
+5	32
+6	64
+7	128
+8	256
+9	512
+10	1024
+11	2048
+12	4096
+13	8192
+14	16384
+15	32768
+16	65536
+
+当某个卡片到达最高级时，就算达到了升级所需要的经验值，也不再升级，就保持在最高级
+
+具体的客户端逻辑是：
+
+手办出现时会去复制ReplicatedStorage - InfoPart - Info，这里存放了信息模板
+其中Info - Level - LevelText是一个textlabel，用于显示手办当前的等级信息，格式是：LV.xxx,其中xxx是等级数值
+其中Info - Level - ProgressBar是一个imagelabel，用于显示升级进度，用ProgressBar的Size中的X轴的大小来控制进度条变化，大小是用的Scale，当Size是0就代表进度条为0，Size为1就表示进度条满了
+
+
+策划文档V2.1  增加部分正式数值的配置
+
+1.我们的盲盒表配置修改，改成：
+Id	盲盒名字	盲盒品质	盲盒稀有度	盲盒模型名字	盲盒价格	开启倒计时（秒）	盲盒对应卡池
+1001	Leaf	1	1	LeafCommon	50 	8	99001
+1002	Water	2	1	WaterCommon	1500 	40	99001
+1003	Lunar	3	1	LunarCommon	20000 	140	99001
+1004	Solar	4	1	SolarCommon	180000 	480	99001
+1005	Flame	5	1	FlameCommon	1200000 	1800	99001
+1006	Heart	6	1	HeartCommon	5000000 	6600	99001
+1007	Celestial	7	1	CelestialCommon	20000000 	19800	99001
+2001	Leaf	1	2	LeafLight	100 	9	99001
+2002	Water	2	2	WaterLight	3000 	44	99001
+2003	Lunar	3	2	LunarLight	40000 	154	99001
+2004	Solar	4	2	SolarLight	360000 	528	99001
+2005	Flame	5	2	FlameLight	2400000 	1980	99001
+2006	Heart	6	2	HeartLight	10000000 	7260	99001
+2007	Celestial	7	2	CelestialLight	40000000 	21780	99001
+3001	Leaf	1	3	LeafGold	300 	10	99001
+3002	Water	2	3	WaterGold	9000 	50	99001
+3003	Lunar	3	3	LunarGold	120000 	175	99001
+3004	Solar	4	3	SolarGold	1080000 	600	99001
+3005	Flame	5	3	FlameGold	7200000 	2250	99001
+3006	Heart	6	3	HeartGold	30000000 	8250	99001
+3007	Celestial	7	3	CelestialGold	120000000 	24750	99001
+4001	Leaf	1	4	LeafDiamond	750 	12	99001
+4002	Water	2	4	WaterDiamond	22500 	58	99001
+4003	Lunar	3	4	LunarDiamond	300000 	203	99001
+4004	Solar	4	4	SolarDiamond	2700000 	696	99001
+4005	Flame	5	4	FlameDiamond	18000000 	2610	99001
+4006	Heart	6	4	HeartDiamond	75000000 	9570	99001
+4007	Celestial	7	4	CelestialDiamond	300000000 	28710	99001
+5001	Leaf	1	5	LeafRainbow	2500 	14	99001
+5002	Water	2	5	WaterRainbow	75000 	68	99001
+5003	Lunar	3	5	LunarRainbow	1000000 	238	99001
+5004	Solar	4	5	SolarRainbow	9000000 	816	99001
+5005	Flame	5	5	FlameRainbow	60000000 	3060	99001
+5006	Heart	6	5	HeartRainbow	250000000 	11220	99001
+5007	Celestial	7	5	CelestialRainbow	1000000000 	33660	99001
+
+
+我们的盲盒刷新卡池修改为：
+
+Id	刷新池编号	盲盒id	权重
+10001	1	1001	20
+10002	1	1002	20
+10003	1	1003	20
+10004	1	1004	20
+10005	1	1005	20
+10006	1	1006	20
+10007	1	1007	20
+10008	1	2001	20
+10009	1	2002	20
+10010	1	2003	20
+10011	1	2004	20
+10012	1	2005	20
+10013	1	2006	20
+10014	1	2007	20
+10015	1	3001	20
+10016	1	3002	20
+10017	1	3003	20
+10018	1	3004	20
+10019	1	3005	20
+10020	1	3006	20
+10021	1	3007	20
+10022	1	4001	20
+10023	1	4002	20
+10024	1	4003	20
+10025	1	4004	20
+10026	1	4005	20
+10027	1	4006	20
+10028	1	4007	20
+10029	1	5001	20
+10030	1	5002	20
+10031	1	5003	20
+10032	1	5004	20
+10033	1	5005	20
+10034	1	5006	20
+10035	1	5007	20
+
+
+我们的手办表修改为：
+id	手办名字	金币基础产速	品质	稀有度	模型资源	对应展台路径	对应领取按钮路径
+10001	绿叶布布1	1	1	1	Leaf/LBB01	ShowCase/Green/Position1	ButtonGreen/Button1
+10002	绿叶布布2	2	1	1	Leaf/LBB02	ShowCase/Green/Position2	ButtonGreen/Button2
+10003	绿叶布布3	3	1	1	Leaf/LBB03	ShowCase/Green/Position3	ButtonGreen/Button3
+10004	绿叶布布4	4	1	1	Leaf/LBB04	ShowCase/Green/Position4	ButtonGreen/Button4
+10005	绿叶布布5	5	1	1	Leaf/LBB05	ShowCase/Green/Position5	ButtonGreen/Button5
+10006	绿叶布布6	6	1	1	Leaf/LBB06	ShowCase/Green/Position6	ButtonGreen/Button6
+10007	绿叶布布7	7	1	1	Leaf/LBB07	ShowCase/Green/Position7	ButtonGreen/Button7
+10008	绿叶布布8	8	1	1	Leaf/LBB08	ShowCase/Green/Position8	ButtonGreen/Button8
+10009	绿叶布布9	10	1	1	Leaf/LBB09	ShowCase/Green/Position9	ButtonGreen/Button9
+20001	水布布1	50	2	1	Water/LBB01	ShowCase/Blue/Position1	ButtonBlue/Button1
+20002	水布布2	56	2	1	Water/LBB02	ShowCase/Blue/Position2	ButtonBlue/Button2
+20003	水布布3	63	2	1	Water/LBB03	ShowCase/Blue/Position3	ButtonBlue/Button3
+20004	水布布4	71	2	1	Water/LBB04	ShowCase/Blue/Position4	ButtonBlue/Button4
+20005	水布布5	80	2	1	Water/LBB05	ShowCase/Blue/Position5	ButtonBlue/Button5
+20006	水布布6	90	2	1	Water/LBB06	ShowCase/Blue/Position6	ButtonBlue/Button6
+20007	水布布7	102	2	1	Water/LBB07	ShowCase/Blue/Position7	ButtonBlue/Button7
+20008	水布布8	116	2	1	Water/LBB07	ShowCase/Blue/Position8	ButtonBlue/Button8
+20009	水布布9	132	2	1	Water/LBB09	ShowCase/Blue/Position9	ButtonBlue/Button9
+30001	月球布布1	220	3	1	Lunar/LBB01	ShowCase/Purple/Position1	ButtonPurple/Button1
+30002	月球布布2	250	3	1	Lunar/LBB02	ShowCase/Purple/Position2	ButtonPurple/Button2
+30003	月球布布3	285	3	1	Lunar/LBB02	ShowCase/Purple/Position3	ButtonPurple/Button3
+30004	月球布布4	325	3	1	Lunar/LBB02	ShowCase/Purple/Position4	ButtonPurple/Button4
+30005	月球布布5	370	3	1	Lunar/LBB02	ShowCase/Purple/Position5	ButtonPurple/Button5
+30006	月球布布6	420	3	1	Lunar/LBB02	ShowCase/Purple/Position6	ButtonPurple/Button6
+30007	月球布布7	480	3	1	Lunar/LBB02	ShowCase/Purple/Position7	ButtonPurple/Button7
+30008	月球布布8	550	3	1	Lunar/LBB02	ShowCase/Purple/Position8	ButtonPurple/Button8
+30009	月球布布9	630	3	1	Lunar/LBB02	ShowCase/Purple/Position9	ButtonPurple/Button9
+40001	太阳布布1	950	4	1	Solar/LBB01	ShowCase/Orange/Position1	ButtonOrange/Button1
+40002	太阳布布2	1080	4	1	Solar/LBB02	ShowCase/Orange/Position2	ButtonOrange/Button2
+40003	太阳布布3	1230	4	1	Solar/LBB03	ShowCase/Orange/Position3	ButtonOrange/Button3
+40004	太阳布布4	1400	4	1	Solar/LBB04	ShowCase/Orange/Position4	ButtonOrange/Button4
+40005	太阳布布5	1600	4	1	Solar/LBB04	ShowCase/Orange/Position5	ButtonOrange/Button5
+40006	太阳布布6	1830	4	1	Solar/LBB04	ShowCase/Orange/Position6	ButtonOrange/Button6
+40007	太阳布布7	2100	4	1	Solar/LBB04	ShowCase/Orange/Position7	ButtonOrange/Button7
+40008	太阳布布8	2400	4	1	Solar/LBB04	ShowCase/Orange/Position8	ButtonOrange/Button8
+40009	太阳布布9	2750	4	1	Solar/LBB04	ShowCase/Orange/Position9	ButtonOrange/Button9
+50001	火焰布布1	3000	5	1	Flame/LBB01	ShowCase/Red/Position1	ButtonRed/Button1
+50002	火焰布布2	3400	5	1	Flame/LBB01	ShowCase/Red/Position2	ButtonRed/Button2
+50003	火焰布布3	3850	5	1	Flame/LBB01	ShowCase/Red/Position3	ButtonRed/Button3
+50004	火焰布布4	4350	5	1	Flame/LBB01	ShowCase/Red/Position4	ButtonRed/Button4
+50005	火焰布布5	4900	5	1	Flame/LBB01	ShowCase/Red/Position5	ButtonRed/Button5
+50006	火焰布布6	5550	5	1	Flame/LBB01	ShowCase/Red/Position6	ButtonRed/Button6
+50007	火焰布布7	6300	5	1	Flame/LBB01	ShowCase/Red/Position7	ButtonRed/Button7
+60001	心脏布布1	12000	6	1	Heart/LBB01	ShowCase/Yellow/Position1	ButtonYellow/Button1
+60002	心脏布布2	13200	6	1	Heart/LBB02	ShowCase/Yellow/Position2	ButtonYellow/Button2
+60003	心脏布布3	14600	6	1	Heart/LBB03	ShowCase/Yellow/Position3	ButtonYellow/Button3
+60004	心脏布布4	16200	6	1	Heart/LBB04	ShowCase/Yellow/Position4	ButtonYellow/Button4
+60005	心脏布布5	18000	6	1	Heart/LBB04	ShowCase/Yellow/Position5	ButtonYellow/Button5
+60006	心脏布布6	20000	6	1	Heart/LBB04	ShowCase/Yellow/Position6	ButtonYellow/Button6
+60007	心脏布布7	22300	6	1	Heart/LBB04	ShowCase/Yellow/Position7	ButtonYellow/Button7
+70001	虚空布布1	33000	7	1	Heart/LBB01	ShowCase/Blue/Position1	ButtonBlue/Button1
+70002	虚空布布2	38000	7	1	Heart/LBB02	ShowCase/Blue/Position2	ButtonBlue/Button2
+70003	虚空布布3	44000	7	1	Heart/LBB03	ShowCase/Blue/Position3	ButtonBlue/Button3
+70004	虚空布布4	51000	7	1	Heart/LBB04	ShowCase/Blue/Position4	ButtonBlue/Button4
+70005	虚空布布5	59000	7	1	Heart/LBB04	ShowCase/Blue/Position5	ButtonBlue/Button5
+
+关于手办表，你需要做的改动是：我们的手办模型之前是只填了名字，现在我改成了：路径/名字，比如填：Leaf/LBB01，就是去ReplicatedStorage - LBB - Leaf下找LBB01，这个规则要改动，最好把字段名字从ModelName改成ModelResource或者你定个其他名字
+
+我们的手办卡池表改成：
+卡池id	手办id	刷新权重
+99001	10001	20
+99001	10002	20
+99001	10003	20
+99001	10004	20
+99001	10005	20
+99001	10006	20
+99001	10007	20
+99001	10008	20
+99001	10009	20
+99001	20001	20
+99001	20002	20
+99001	20003	20
+99001	20004	20
+99001	20005	20
+99001	20006	20
+99001	20007	20
+99001	20008	20
+99001	20009	20
+99001	30001	20
+99001	30002	20
+99001	30003	20
+99001	30004	20
+99001	30005	20
+99001	30006	20
+99001	30007	20
+99001	30008	20
+99001	30009	20
+99001	40001	20
+99001	40002	20
+99001	40003	20
+99001	40004	20
+99001	40005	20
+99001	40006	20
+99001	40007	20
+99001	40008	20
+99001	40009	20
+99001	50001	20
+99001	50002	20
+99001	50003	20
+99001	50004	20
+99001	50005	20
+99001	50006	20
+99001	50007	20
+99001	60001	20
+99001	60002	20
+99001	60003	20
+99001	60004	20
+99001	60005	20
+99001	60006	20
+99001	60007	20
+99001	70001	20
+99001	70002	20
+99001	70003	20
+99001	70004	20
+99001	70005	20
+
+
+我们的升级经验消耗表改成：
+等级	升至下级所需经验值
+1	2
+2	3
+3	5
+4	8
+5	12
+6	18
+7	26
+8	38
+9	55
+10	80
+11	115
+12	165
+13	235
+14	335
+15	455

@@ -2,8 +2,8 @@
 脚本名称: DataService
 脚本类型: ModuleScript
 脚本位置: ServerScriptService/Server/DataService
-版本: V1.7
-职责: 数据加载/保存与金币与手办管理与统计
+版本: V2.0
+职责: 数据加载/保存与金币与手办管理与统计与升级
 ]]
 
 local DataStoreService = game:GetService("DataStoreService")
@@ -12,6 +12,7 @@ local HttpService = game:GetService("HttpService")
 
 local GameConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("GameConfig"))
 local FigurineConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("FigurineConfig"))
+local UpgradeConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("UpgradeConfig"))
 
 local DataService = {}
 DataService.__index = DataService
@@ -75,9 +76,28 @@ local function normalizeFigurineStates(states)
 				if state.LastCollectTime == nil and state.LastClaimTime ~= nil then
 					state.LastCollectTime = tonumber(state.LastClaimTime)
 				end
+				local level = tonumber(state.Level)
+				if not level or level < 1 then
+					level = 1
+				end
+				level = math.floor(level)
+				local maxLevel = UpgradeConfig.GetMaxLevel()
+				if level > maxLevel then
+					level = maxLevel
+				end
+				state.Level = level
+				if state.Exp == nil then
+					state.Exp = 1
+				else
+					local exp = tonumber(state.Exp)
+					if not exp or exp < 0 then
+						exp = 0
+					end
+					state.Exp = math.floor(exp)
+				end
 				normalized[id] = state
 			elseif type(value) == "number" then
-				normalized[id] = { LastCollectTime = value }
+				normalized[id] = { LastCollectTime = value, Level = 1, Exp = 1 }
 			end
 		end
 	end
@@ -99,6 +119,22 @@ local function normalizeOutputSpeed(value)
 		return 0
 	end
 	return num
+end
+
+local function normalizeLevel(value)
+	local num = tonumber(value)
+	if not num or num < 1 then
+		return 1
+	end
+	return math.floor(num)
+end
+
+local function normalizeExp(value)
+	local num = tonumber(value)
+	if not num or num < 0 then
+		return 0
+	end
+	return math.floor(num)
 end
 
 local function normalizeCapsuleOpenById(stats)
@@ -127,7 +163,7 @@ local function normalizeCapsuleOpenById(stats)
 	return normalized, total, changed
 end
 
-local function calculateOutputSpeed(figurines)
+local function calculateOutputSpeed(figurines, figurineStates)
 	if type(figurines) ~= "table" then
 		return 0
 	end
@@ -144,6 +180,33 @@ local function calculateOutputSpeed(figurines)
 		end
 	end
 	return total
+end
+
+local function applyLevelExp(level, exp)
+	local maxLevel = UpgradeConfig.GetMaxLevel()
+	local currentLevel = normalizeLevel(level)
+	local currentExp = normalizeExp(exp)
+	local leveledUp = false
+	if currentLevel >= maxLevel then
+		return maxLevel, currentExp, false, true
+	end
+	while currentLevel < maxLevel do
+		local required = UpgradeConfig.GetRequiredExp(currentLevel)
+		if not required or required <= 0 then
+			break
+		end
+		if currentExp < required then
+			break
+		end
+		currentExp -= required
+		currentLevel += 1
+		leveledUp = true
+	end
+	local isMax = currentLevel >= maxLevel
+	if isMax then
+		currentLevel = maxLevel
+	end
+	return currentLevel, currentExp, leveledUp, isMax
 end
 
 local function applyCoinsAttribute(player, coins)
@@ -243,7 +306,7 @@ function DataService:LoadPlayer(player)
 		needsSave = true
 	end
 
-	local recalculatedSpeed = calculateOutputSpeed(data.Figurines)
+	local recalculatedSpeed = calculateOutputSpeed(data.Figurines, data.FigurineStates)
 	local normalizedSpeed = normalizeOutputSpeed(data.OutputSpeed)
 	if normalizedSpeed ~= recalculatedSpeed then
 		data.OutputSpeed = recalculatedSpeed
@@ -322,19 +385,51 @@ end
 function DataService:AddFigurine(player, figurineId)
 	local record = sessionData[player.UserId]
 	if not record then
-		return false
+		return nil
 	end
 	if type(record.Data.Figurines) ~= "table" then
 		record.Data.Figurines = {}
 	end
-	local id = tonumber(figurineId) or figurineId
-	if record.Data.Figurines[id] then
-		return false
+	if type(record.Data.FigurineStates) ~= "table" then
+		record.Data.FigurineStates = {}
 	end
-	record.Data.Figurines[id] = true
+	local id = tonumber(figurineId) or figurineId
+	local isNew = record.Data.Figurines[id] ~= true
+	if isNew then
+		record.Data.Figurines[id] = true
+	end
+
+	local state = record.Data.FigurineStates[id]
+	if type(state) ~= "table" then
+		state = {}
+		record.Data.FigurineStates[id] = state
+	end
+
+	if state.LastCollectTime == nil then
+		state.LastCollectTime = os.time()
+	end
+
+	local beforeLevel = normalizeLevel(state.Level)
+	local beforeExp = normalizeExp(state.Exp)
+	local currentExp = beforeExp + 1
+	local currentLevel, remainingExp, leveledUp, isMax = applyLevelExp(beforeLevel, currentExp)
+
+	state.Level = currentLevel
+	state.Exp = remainingExp
 	record.Dirty = true
-	self:RecalculateOutputSpeed(player)
-	return true
+	if isNew or leveledUp then
+		self:RecalculateOutputSpeed(player)
+	end
+	return {
+		IsNew = isNew,
+		LeveledUp = leveledUp,
+		MaxLevel = isMax,
+		Level = currentLevel,
+		Exp = remainingExp,
+		PrevLevel = beforeLevel,
+		PrevExp = beforeExp,
+		AddedExp = 1,
+	}
 end
 
 function DataService:EnsureFigurineState(player, figurineId)
@@ -345,6 +440,9 @@ function DataService:EnsureFigurineState(player, figurineId)
 	if type(record.Data.FigurineStates) ~= "table" then
 		record.Data.FigurineStates = {}
 	end
+	if type(record.Data.Figurines) ~= "table" then
+		record.Data.Figurines = {}
+	end
 	local id = tonumber(figurineId) or figurineId
 	local state = record.Data.FigurineStates[id]
 	if type(state) ~= "table" then
@@ -353,6 +451,25 @@ function DataService:EnsureFigurineState(player, figurineId)
 		record.Dirty = true
 	elseif state.LastCollectTime == nil then
 		state.LastCollectTime = os.time()
+		record.Dirty = true
+	end
+	local maxLevel = UpgradeConfig.GetMaxLevel()
+	local normalizedLevel = normalizeLevel(state.Level)
+	if normalizedLevel > maxLevel then
+		normalizedLevel = maxLevel
+	end
+	if state.Level ~= normalizedLevel then
+		state.Level = normalizedLevel
+		record.Dirty = true
+	end
+	local normalizedExp
+	if state.Exp == nil then
+		normalizedExp = record.Data.Figurines[id] and 1 or 0
+	else
+		normalizedExp = normalizeExp(state.Exp)
+	end
+	if state.Exp ~= normalizedExp then
+		state.Exp = normalizedExp
 		record.Dirty = true
 	end
 	return state
@@ -520,7 +637,7 @@ function DataService:RecalculateOutputSpeed(player)
 	if not record then
 		return 0
 	end
-	local total = calculateOutputSpeed(record.Data.Figurines)
+	local total = calculateOutputSpeed(record.Data.Figurines, record.Data.FigurineStates)
 	if record.Data.OutputSpeed ~= total then
 		record.Data.OutputSpeed = total
 		record.Dirty = true

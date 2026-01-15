@@ -2,18 +2,21 @@
 脚本名称: FigurineService
 脚本类型: ModuleScript
 脚本位置: ServerScriptService/Server/FigurineService
-版本: V1.6
-职责: 手办抽取/摆放/待领取产币/信息展示
+版本: V2.0
+职责: 手办抽取/摆放/待领取产币/信息展示/升级表现
 ]]
 
 local Players = game:GetService("Players")
+local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerStorage = game:GetService("ServerStorage")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
 local GameConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("GameConfig"))
 local FigurineConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("FigurineConfig"))
 local FigurinePoolConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("FigurinePoolConfig"))
+local UpgradeConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("UpgradeConfig"))
 
 local DataService = require(script.Parent:WaitForChild("DataService"))
 
@@ -24,9 +27,15 @@ local FigurineService = {}
 FigurineService.__index = FigurineService
 
 local rng = Random.new()
-local playerStates = {} -- [userId] = {Active, LoopStarted, UiEntries, ButtonConnections, TouchStates, PlatformTweens, ModelTweens}
+local playerStates = {} -- [userId] = {Active, LoopStarted, UiEntries, ButtonConnections, TouchStates, PlatformTweens, ModelTweens, ButtonEffects}
 
 local CLAIM_COOLDOWN = 0.5
+local CLAIM_EFFECT_DEFAULT_COUNT = 25
+local CLAIM_EFFECT_LIFETIME = 3
+local CLAIM_EFFECT_FOLDER_NAME = "Effect"
+local CLAIM_EFFECT_TEMPLATE_NAME = "EffectTouchMoney"
+local CLAIM_EFFECT_DEBUG = false
+local PLATFORM_EFFECT_TEMPLATE_NAME = "EffectPlatformUp"
 local PLATFORM_MIN_Y = 1
 local PLATFORM_MAX_Y = 5
 local UI_UPDATE_INTERVAL = 1
@@ -126,6 +135,22 @@ local function resolveCFrame(node)
 		return node:GetPivot()
 	end
 	return nil
+end
+
+local function resolveModelResource(modelRoot, resource)
+	if not modelRoot or type(resource) ~= "string" or resource == "" then
+		return nil
+	end
+	local current = modelRoot
+	for _, segment in ipairs(string.split(resource, "/")) do
+		if segment ~= "" then
+			current = current:FindFirstChild(segment)
+			if not current then
+				return nil
+			end
+		end
+	end
+	return current
 end
 
 local function getBottomAlignedCFrame(baseCFrame, baseSizeY, targetSizeY)
@@ -253,6 +278,7 @@ local function getPlayerState(player)
 			TouchStates = {},
 			PlatformTweens = {},
 			ModelTweens = {},
+			ButtonEffects = {},
 		}
 		playerStates[player.UserId] = state
 	end
@@ -268,6 +294,181 @@ local function getPlayerFromHit(hit)
 		return nil
 	end
 	return Players:GetPlayerFromCharacter(character)
+end
+
+local function collectClaimEmitters(button)
+	if not button then
+		return nil
+	end
+	local emitters = {}
+	for _, obj in ipairs(button:GetDescendants()) do
+		if obj:IsA("ParticleEmitter") then
+			obj.Enabled = false
+			table.insert(emitters, obj)
+		end
+	end
+	if #emitters == 0 then
+		return nil
+	end
+	return emitters
+end
+
+local function playClaimEmitters(emitters)
+	if not emitters then
+		return
+	end
+	for _, emitter in ipairs(emitters) do
+		if emitter.Parent then
+			local count = tonumber(emitter:GetAttribute("BurstCount")) or CLAIM_EFFECT_DEFAULT_COUNT
+			if count > 0 then
+				emitter:Emit(count)
+			end
+		end
+	end
+end
+
+local function collectEmittersFromInstances(instances)
+	if not instances then
+		return nil
+	end
+	local emitters = {}
+	for _, obj in ipairs(instances) do
+		if obj:IsA("ParticleEmitter") then
+			obj.Enabled = false
+			table.insert(emitters, obj)
+		end
+		for _, child in ipairs(obj:GetDescendants()) do
+			if child:IsA("ParticleEmitter") then
+				child.Enabled = false
+				table.insert(emitters, child)
+			end
+		end
+	end
+	if #emitters == 0 then
+		return nil
+	end
+	return emitters
+end
+
+local function cloneEffectChildren(template, targetParent)
+	local clones = {}
+	for _, child in ipairs(template:GetChildren()) do
+		local clone = child:Clone()
+		clone.Parent = targetParent
+		table.insert(clones, clone)
+		Debris:AddItem(clone, CLAIM_EFFECT_LIFETIME)
+	end
+	return clones
+end
+
+local function clonePlatformEffect(platform)
+	if not platform then
+		return nil
+	end
+	local template = ReplicatedStorage:FindFirstChild(PLATFORM_EFFECT_TEMPLATE_NAME)
+	if not template then
+		return nil
+	end
+	local clones = {}
+	for _, child in ipairs(template:GetChildren()) do
+		local clone = child:Clone()
+		clone.Parent = platform
+		table.insert(clones, clone)
+	end
+	if #clones == 0 then
+		return nil
+	end
+	return clones
+end
+
+local function cleanupEffectInstances(instances)
+	if not instances then
+		return
+	end
+	for _, inst in ipairs(instances) do
+		if inst and inst.Parent then
+			inst:Destroy()
+		end
+	end
+end
+
+local cachedClaimEffect
+
+local function resolveClaimEffectTemplate()
+	if cachedClaimEffect and cachedClaimEffect.Parent then
+		return cachedClaimEffect
+	end
+	local function findIn(container)
+		if not container then
+			return nil
+		end
+		local folder = container:FindFirstChild(CLAIM_EFFECT_FOLDER_NAME)
+		if folder then
+			local template = folder:FindFirstChild(CLAIM_EFFECT_TEMPLATE_NAME)
+			if template then
+				return template
+			end
+		end
+		return container:FindFirstChild(CLAIM_EFFECT_TEMPLATE_NAME)
+	end
+	cachedClaimEffect = findIn(ServerStorage) or findIn(ReplicatedStorage)
+	return cachedClaimEffect
+end
+
+local function resolveClaimEffectTarget(button)
+	if not button then
+		return nil
+	end
+	local touch = button:FindFirstChild("Touch")
+	if touch then
+		if touch:IsA("BasePart") or touch:IsA("Attachment") then
+			return touch
+		end
+	end
+	return button
+end
+
+local function spawnClaimEffect(button, fallbackEmitters)
+	local template = resolveClaimEffectTemplate()
+	local target = resolveClaimEffectTarget(button)
+	local targetCFrame
+	local targetParent
+	if target then
+		if target:IsA("Attachment") then
+			targetCFrame = target.WorldCFrame
+			targetParent = target.Parent
+		elseif target:IsA("BasePart") then
+			targetCFrame = target.CFrame
+			targetParent = target
+		end
+	end
+	if not targetCFrame then
+		targetCFrame = button.CFrame
+	end
+	if not targetParent then
+		targetParent = Workspace
+	end
+
+	if template then
+		if not targetParent or not targetParent:IsA("BasePart") then
+			if CLAIM_EFFECT_DEBUG then
+				warn("[FigurineService] ClaimEffect target invalid, fallback to button emitters")
+			end
+			playClaimEmitters(fallbackEmitters)
+			return
+		end
+		local clones = cloneEffectChildren(template, targetParent)
+		local emitters = collectEmittersFromInstances(clones)
+		if not emitters and CLAIM_EFFECT_DEBUG then
+			warn("[FigurineService] ClaimEffect template has no ParticleEmitter")
+		end
+		playClaimEmitters(emitters)
+		return
+	end
+	if CLAIM_EFFECT_DEBUG then
+		warn("[FigurineService] ClaimEffect template missing, fallback to button emitters")
+	end
+	playClaimEmitters(fallbackEmitters)
 end
 
 local function getFigurineRate(figurineInfo)
@@ -303,6 +504,36 @@ local function updateMoneyLabel(player, figurineId, entry)
 	entry.MoneyLabel.Text = string.format("%s/(%s/S)", pendingText, rateText)
 end
 
+local function updateLevelLabel(player, figurineId, entry)
+	if not entry then
+		return
+	end
+	local state = DataService:EnsureFigurineState(player, figurineId)
+	if not state then
+		return
+	end
+	local level = tonumber(state.Level) or 1
+	local exp = tonumber(state.Exp) or 0
+	local maxLevel = UpgradeConfig.GetMaxLevel()
+	local progress = 0
+	if level >= maxLevel then
+		level = maxLevel
+		progress = 1
+	else
+		local required = UpgradeConfig.GetRequiredExp(level) or 0
+		if required > 0 then
+			progress = math.clamp(exp / required, 0, 1)
+		end
+	end
+	if entry.LevelLabel and entry.LevelLabel:IsA("TextLabel") then
+		entry.LevelLabel.Text = string.format("LV.%d", level)
+	end
+	if entry.ProgressBar and entry.ProgressBar:IsA("ImageLabel") then
+		local size = entry.ProgressBar.Size
+		entry.ProgressBar.Size = UDim2.new(progress, size.X.Offset, size.Y.Scale, size.Y.Offset)
+	end
+end
+
 local function attachInfoGui(platform)
 	local infoFolder = ReplicatedStorage:FindFirstChild("InfoPart")
 	if not infoFolder then
@@ -331,9 +562,13 @@ end
 local function registerUiEntry(player, figurineInfo, platform, infoGui)
 	local nameLabel
 	local moneyLabel
+	local levelLabel
+	local progressBar
 	if infoGui then
 		nameLabel = infoGui:FindFirstChild("Name", true)
 		moneyLabel = infoGui:FindFirstChild("Money", true)
+		levelLabel = infoGui:FindFirstChild("LevelText", true)
+		progressBar = infoGui:FindFirstChild("ProgressBar", true)
 		if nameLabel and nameLabel:IsA("TextLabel") then
 			nameLabel.Text = figurineInfo.Name
 		end
@@ -343,11 +578,14 @@ local function registerUiEntry(player, figurineInfo, platform, infoGui)
 		InfoGui = infoGui,
 		NameLabel = nameLabel,
 		MoneyLabel = moneyLabel,
+		LevelLabel = levelLabel,
+		ProgressBar = progressBar,
 		Rate = getFigurineRate(figurineInfo),
 	}
 	local state = getPlayerState(player)
 	state.UiEntries[figurineInfo.Id] = entry
 	updateMoneyLabel(player, figurineInfo.Id, entry)
+	updateLevelLabel(player, figurineInfo.Id, entry)
 end
 
 local function setupShowcasePlatform(player, figurineInfo, animate)
@@ -370,7 +608,8 @@ local function setupShowcasePlatform(player, figurineInfo, animate)
 		local baseRotation = model:GetAttribute("BaseRotation")
 		if typeof(baseRotation) ~= "CFrame" then
 			local modelRoot = ReplicatedStorage:FindFirstChild("LBB")
-			local source = modelRoot and figurineInfo and modelRoot:FindFirstChild(figurineInfo.ModelName)
+			local resource = figurineInfo and (figurineInfo.ModelResource or figurineInfo.ModelName)
+			local source = modelRoot and resource and resolveModelResource(modelRoot, resource)
 			local sourceCFrame = source and resolveCFrame(source)
 			if sourceCFrame then
 				baseRotation = getRotationOnly(sourceCFrame)
@@ -397,6 +636,7 @@ local function setupShowcasePlatform(player, figurineInfo, animate)
 		local targetCFrame = getBottomAlignedCFrame(baseCFrame, baseSize.Y, targetSize.Y)
 		platform.Size = startSize
 		platform.CFrame = startCFrame
+		local platformEffects = clonePlatformEffect(platform)
 		if model and modelSize and modelOffset then
 			local startModelCFrame = getFigurinePivotCFrame(startCFrame, startSize.Y, modelSize, modelOffset, modelRotation)
 			local targetModelCFrame = getFigurinePivotCFrame(targetCFrame, targetSize.Y, modelSize, modelOffset, modelRotation)
@@ -405,6 +645,8 @@ local function setupShowcasePlatform(player, figurineInfo, animate)
 		local tween = TweenService:Create(platform, TweenInfo.new(duration, Enum.EasingStyle.Linear), { Size = targetSize, CFrame = targetCFrame })
 		state.PlatformTweens[platform] = tween
 		tween.Completed:Connect(function(playbackState)
+			cleanupEffectInstances(platformEffects)
+			platformEffects = nil
 			state.PlatformTweens[platform] = nil
 			if playbackState ~= Enum.PlaybackState.Completed then
 				return
@@ -476,6 +718,11 @@ local function bindClaimButton(player, figurineInfo)
 		TouchingParts = {},
 	}
 	state.TouchStates[button] = touchState
+	local emitters = state.ButtonEffects[button]
+	if emitters == nil then
+		emitters = collectClaimEmitters(button)
+		state.ButtonEffects[button] = emitters
+	end
 
 	local function onTouched(hit)
 		local hitPlayer = getPlayerFromHit(hit)
@@ -496,6 +743,7 @@ local function bindClaimButton(player, figurineInfo)
 		touchState.IsTouching = true
 		touchState.LastTrigger = now
 		FigurineService:CollectCoins(player, figurineInfo.Id)
+		spawnClaimEffect(button, emitters)
 		local entry = state.UiEntries[figurineInfo.Id]
 		updateMoneyLabel(player, figurineInfo.Id, entry)
 	end
@@ -542,9 +790,10 @@ local function placeFigurineModel(player, figurineInfo)
 	end
 
 	local modelRoot = ReplicatedStorage:WaitForChild("LBB")
-	local source = modelRoot:FindFirstChild(figurineInfo.ModelName)
+	local resource = figurineInfo.ModelResource or figurineInfo.ModelName
+	local source = resolveModelResource(modelRoot, resource)
 	if not source then
-		warn(string.format("[FigurineService] Figurine model missing: %s", figurineInfo.ModelName))
+		warn(string.format("[FigurineService] Figurine model missing: %s", tostring(resource)))
 		return false
 	end
 
@@ -740,13 +989,17 @@ function FigurineService:GrantFromCapsule(player, capsuleInfo)
 		return nil, false
 	end
 
-	local added = DataService:AddFigurine(player, figurineId)
+	local result = DataService:AddFigurine(player, figurineId)
+	local added = result and result.IsNew
 	if added then
-		DataService:EnsureFigurineState(player, figurineId)
 		placeFigurineModel(player, figurineInfo)
 		setupShowcasePlatform(player, figurineInfo, true)
 		bindClaimButton(player, figurineInfo)
 		triggerCameraFocus(player, figurineId)
+	elseif result then
+		local state = getPlayerState(player)
+		local entry = state.UiEntries[figurineId]
+		updateLevelLabel(player, figurineId, entry)
 	end
 
 	return figurineInfo, added

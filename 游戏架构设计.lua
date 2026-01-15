@@ -1,9 +1,9 @@
 ﻿--[[
 游戏架构设计文档
-版本: V1.9
-最后更新: 2026-01-12
+版本: V2.1
+最后更新: 2026-01-14
 ]]
-游戏架构设计 V1.9
+游戏架构设计 V2.1
 
 1. 设计原则
 - 服务端权威：货币、随机、产出、升级、存档都在服务端
@@ -23,7 +23,7 @@ ReplicatedStorage/
 - Config/GameConfig, EggConfig, CardPoolConfig, PetConfig, UpgradeConfig, EconomyConfig
 - Config/CapsuleConfig（盲盒配置）
 - Config/CapsuleSpawnPoolConfig（盲盒刷新池）
-- Config/FigurineConfig（手办配置）
+- Config/FigurineConfig（手办配置，ModelResource支持路径）
 - Config/FigurinePoolConfig（手办卡池配置）
 - Modules/FormatHelper（数值格式化）
 - Events/LabubuEvents（具体见 RemoteEvent列表.lua）
@@ -73,13 +73,13 @@ PlayerData
 - Eggs: { {Uid, EggId} }  -- 背包内的蛋
 - PlacedEggs: { {Uid, EggId, HatchEndTime, Position, Rotation, IsLocal} } -- Position/Rotation为相对IdleFloor的本地坐标
 - Figurines: { [FigurineId] = true }
-- FigurineStates: { [FigurineId] = {LastCollectTime} }
+- FigurineStates: { [FigurineId] = {LastCollectTime, Level, Exp} }
 - Pets: { [PetId] = {Unlocked, Level, Rank, Count, LastCollectTime, PendingCoins} }
 - LastLogoutTime: unix
 
 说明
 - PendingCoins 为未收取累计，LastCollectTime 用于结算增量，在线/离线共用避免双算
-- V1.7 启用 Coins + Figurines + FigurineStates + 统计字段，其它字段预留给后续阶段
+- V2.0 启用 FigurineStates.Level/Exp 升级字段，其它字段预留给后续阶段
 
 运行时缓存（不持久化）
 - DataVersion: number  -- 每次数据变更自增，用于增量同步
@@ -93,12 +93,12 @@ PlayerData
 - PetBoard: PetId, OwnerUserId
 
 4. 核心系统职责
-- DataService：会话缓存 + Dirty 标记 + 间隔保存 + BindToClose 兜底，UpdateAsync 持久化，离线结算，统计(在线时长/盲盒开启/总产出速度)
+- DataService：会话缓存 + Dirty 标记 + 间隔保存 + BindToClose 兜底，UpdateAsync 持久化，离线结算，统计(在线时长/盲盒开启/总产出速度)，手办升级数据管理
 - GMCommands：GM命令处理（加金币/清金币/命令列表）
 - HomeService：玩家进入创建基地，设置OwnerUserId并缓存节点，维护地板范围/格位信息，更新基地PlayerInfo展示，出生朝向对准ClaimAll
 - ConveyorService：按配置间隔产蛋，服务端生成 EggUid，维护索引/最大蛋数/过期清理
 - EggService：盲盒购买校验、背包管理、放置、倒计时与开盒触发
-- FigurineService：开盒随机手办、展台放置、金币待领取/触碰领取、展台信息UI
+- FigurineService：开盒随机手办、展台放置、金币待领取/触碰领取、展台信息UI，升级展示
 - PetService：图鉴解锁、PendingCoins 累积、产币结算、升级条件与品阶更新
 - NetService：所有RemoteEvent统一入口，频率限制/归属/距离/状态/版本校验与重同步
 
@@ -110,7 +110,7 @@ PlayerData
 - 放置蛋：客户端请求 -> 校验位置(在自家地板内/格位) -> 占用检测 -> 生成模型 -> 设置HatchEndTime
 - 开蛋：校验孵化完成 -> 按卡池权重随机手办 -> 摆放展台 -> 开始产币
 - 产币与收取：服务端按 LastCollectTime 结算，触碰领取按钮收取并清零累计
-- 升级：获得同ID宠物累计Count达到阈值自动升级
+- 升级：获得同ID手办累积经验达到 UpgradeConfig 阈值自动升级，达到最高级停止
 - 离线收益：依据离线时长与上限秒数结算，登录时写入 PendingCoins
 - 版本不同步：客户端检测版本缺口 -> RequestResync -> 服务端下发全量快照
 

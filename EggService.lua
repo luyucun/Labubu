@@ -1,4 +1,4 @@
---[[
+﻿--[[
 脚本名称: EggService
 脚本类型: ModuleScript
 脚本位置: ServerScriptService/Server/EggService
@@ -12,6 +12,8 @@ local Workspace = game:GetService("Workspace")
 
 local GameConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("GameConfig"))
 local CapsuleConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("CapsuleConfig"))
+
+local FormatHelper = require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("FormatHelper"))
 
 local DataService = require(script.Parent:WaitForChild("DataService"))
 local FigurineService = require(script.Parent:WaitForChild("FigurineService"))
@@ -298,7 +300,7 @@ end
 local function createPrompt(model, part, price)
 	local prompt = Instance.new("ProximityPrompt")
 	prompt.ActionText = "Buy"
-	prompt.ObjectText = string.format("$%d", price)
+	prompt.ObjectText = FormatHelper.FormatCoinsShort(price, true)
 	prompt.HoldDuration = 0.1
 	prompt.MaxActivationDistance = 20
 	prompt.RequiresLineOfSight = false
@@ -485,8 +487,19 @@ local function createCapsuleTool(player, capsuleInfo, count, stackIndex)
 	handle.Parent = tool
 
 	local model = source:Clone()
+	if model:IsA("Model") then
+		model:ScaleTo(0.375)
+	elseif model:IsA("BasePart") then
+		model.Size = model.Size * 0.375
+	end
+	for _, obj in ipairs(model:GetDescendants()) do
+		if obj:IsA("ProximityPrompt") or obj:IsA("ClickDetector") then
+			obj:Destroy()
+		end
+	end
 	local pivot = model:GetPivot()
-	handle.CFrame = pivot
+	local rotation = CFrame.fromMatrix(Vector3.zero, pivot.RightVector, pivot.UpVector, pivot.LookVector)
+	handle.CFrame = rotation
 	model:PivotTo(handle.CFrame)
 	model.Parent = tool
 
@@ -1036,3 +1049,7 @@ function EggService:ClearPlayerState(player)
 end
 
 return EggService
+
+
+
+
