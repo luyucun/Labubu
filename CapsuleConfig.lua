@@ -1,4 +1,4 @@
---[[
+﻿--[[
 脚本名称: CapsuleConfig
 脚本类型: ModuleScript
 脚本位置: ReplicatedStorage/Config/CapsuleConfig
@@ -18,6 +18,7 @@ CapsuleConfig.Capsules = {
 		Price = 50,
 		OpenSeconds = 8,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 1002,
@@ -28,6 +29,7 @@ CapsuleConfig.Capsules = {
 		Price = 1500,
 		OpenSeconds = 40,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 1003,
@@ -38,6 +40,7 @@ CapsuleConfig.Capsules = {
 		Price = 20000,
 		OpenSeconds = 140,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 1004,
@@ -48,6 +51,7 @@ CapsuleConfig.Capsules = {
 		Price = 180000,
 		OpenSeconds = 480,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 1005,
@@ -58,6 +62,7 @@ CapsuleConfig.Capsules = {
 		Price = 1200000,
 		OpenSeconds = 1800,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 1006,
@@ -68,6 +73,7 @@ CapsuleConfig.Capsules = {
 		Price = 5000000,
 		OpenSeconds = 6600,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 1007,
@@ -78,6 +84,7 @@ CapsuleConfig.Capsules = {
 		Price = 20000000,
 		OpenSeconds = 19800,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 2001,
@@ -88,6 +95,7 @@ CapsuleConfig.Capsules = {
 		Price = 100,
 		OpenSeconds = 9,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 2002,
@@ -98,6 +106,7 @@ CapsuleConfig.Capsules = {
 		Price = 3000,
 		OpenSeconds = 44,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 2003,
@@ -108,6 +117,7 @@ CapsuleConfig.Capsules = {
 		Price = 40000,
 		OpenSeconds = 154,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 2004,
@@ -118,6 +128,7 @@ CapsuleConfig.Capsules = {
 		Price = 360000,
 		OpenSeconds = 528,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 2005,
@@ -128,6 +139,7 @@ CapsuleConfig.Capsules = {
 		Price = 2400000,
 		OpenSeconds = 1980,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 2006,
@@ -138,6 +150,7 @@ CapsuleConfig.Capsules = {
 		Price = 10000000,
 		OpenSeconds = 7260,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 2007,
@@ -148,6 +161,7 @@ CapsuleConfig.Capsules = {
 		Price = 40000000,
 		OpenSeconds = 21780,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 3001,
@@ -158,6 +172,7 @@ CapsuleConfig.Capsules = {
 		Price = 300,
 		OpenSeconds = 10,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 3002,
@@ -168,6 +183,7 @@ CapsuleConfig.Capsules = {
 		Price = 9000,
 		OpenSeconds = 50,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 3003,
@@ -178,6 +194,7 @@ CapsuleConfig.Capsules = {
 		Price = 120000,
 		OpenSeconds = 175,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 3004,
@@ -188,6 +205,7 @@ CapsuleConfig.Capsules = {
 		Price = 1080000,
 		OpenSeconds = 600,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 3005,
@@ -198,6 +216,7 @@ CapsuleConfig.Capsules = {
 		Price = 7200000,
 		OpenSeconds = 2250,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 3006,
@@ -208,6 +227,7 @@ CapsuleConfig.Capsules = {
 		Price = 30000000,
 		OpenSeconds = 8250,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 3007,
@@ -218,6 +238,7 @@ CapsuleConfig.Capsules = {
 		Price = 120000000,
 		OpenSeconds = 24750,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 4001,
@@ -228,6 +249,7 @@ CapsuleConfig.Capsules = {
 		Price = 750,
 		OpenSeconds = 12,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 4002,
@@ -238,6 +260,7 @@ CapsuleConfig.Capsules = {
 		Price = 22500,
 		OpenSeconds = 58,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 4003,
@@ -248,6 +271,7 @@ CapsuleConfig.Capsules = {
 		Price = 300000,
 		OpenSeconds = 203,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 4004,
@@ -258,6 +282,7 @@ CapsuleConfig.Capsules = {
 		Price = 2700000,
 		OpenSeconds = 696,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 4005,
@@ -268,6 +293,7 @@ CapsuleConfig.Capsules = {
 		Price = 18000000,
 		OpenSeconds = 2610,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 4006,
@@ -278,6 +304,7 @@ CapsuleConfig.Capsules = {
 		Price = 75000000,
 		OpenSeconds = 9570,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 4007,
@@ -288,6 +315,7 @@ CapsuleConfig.Capsules = {
 		Price = 300000000,
 		OpenSeconds = 28710,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 5001,
@@ -298,6 +326,7 @@ CapsuleConfig.Capsules = {
 		Price = 2500,
 		OpenSeconds = 14,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 5002,
@@ -308,6 +337,7 @@ CapsuleConfig.Capsules = {
 		Price = 75000,
 		OpenSeconds = 68,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 5003,
@@ -318,6 +348,7 @@ CapsuleConfig.Capsules = {
 		Price = 1000000,
 		OpenSeconds = 238,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 5004,
@@ -328,6 +359,7 @@ CapsuleConfig.Capsules = {
 		Price = 9000000,
 		OpenSeconds = 816,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 5005,
@@ -338,6 +370,7 @@ CapsuleConfig.Capsules = {
 		Price = 60000000,
 		OpenSeconds = 3060,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 5006,
@@ -348,6 +381,7 @@ CapsuleConfig.Capsules = {
 		Price = 250000000,
 		OpenSeconds = 11220,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 	{
 		Id = 5007,
@@ -358,6 +392,7 @@ CapsuleConfig.Capsules = {
 		Price = 1000000000,
 		OpenSeconds = 33660,
 		PoolId = 99001,
+		Icon = "rbxassetid://98616255072587",
 	},
 }
 
@@ -371,3 +406,4 @@ function CapsuleConfig.GetById(id)
 end
 
 return CapsuleConfig
+

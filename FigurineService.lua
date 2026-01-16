@@ -471,8 +471,12 @@ local function spawnClaimEffect(button, fallbackEmitters)
 	playClaimEmitters(fallbackEmitters)
 end
 
-local function getFigurineRate(figurineInfo)
-	return tonumber(figurineInfo.BaseRate) or 0
+local function getFigurineRate(player, figurineInfo)
+	if not player or not figurineInfo then
+		return 0
+	end
+	local state = DataService:EnsureFigurineState(player, figurineInfo.Id)
+	return DataService:CalculateFigurineRate(figurineInfo, state)
 end
 
 local function getPendingCoins(player, figurineId, rate)
@@ -497,7 +501,12 @@ local function updateMoneyLabel(player, figurineId, entry)
 	if not entry or not entry.MoneyLabel or not entry.MoneyLabel.Parent then
 		return
 	end
-	local rate = entry.Rate or 0
+	local figurineInfo = entry.FigurineInfo or FigurineConfig.GetById(figurineId)
+	if not figurineInfo then
+		return
+	end
+	local rate = getFigurineRate(player, figurineInfo)
+	entry.Rate = rate
 	local pending = getPendingCoins(player, figurineId, rate)
 	local pendingText = FormatHelper.FormatCoinsShort(pending, true)
 	local rateText = FormatHelper.FormatCoinsShort(rate, true)
@@ -580,7 +589,8 @@ local function registerUiEntry(player, figurineInfo, platform, infoGui)
 		MoneyLabel = moneyLabel,
 		LevelLabel = levelLabel,
 		ProgressBar = progressBar,
-		Rate = getFigurineRate(figurineInfo),
+		Rate = getFigurineRate(player, figurineInfo),
+		FigurineInfo = figurineInfo,
 	}
 	local state = getPlayerState(player)
 	state.UiEntries[figurineInfo.Id] = entry
@@ -898,7 +908,7 @@ function FigurineService:CollectCoins(player, figurineId)
 	if not figurineInfo then
 		return 0
 	end
-	local rate = getFigurineRate(figurineInfo)
+	local rate = getFigurineRate(player, figurineInfo)
 	local pending = getPendingCoins(player, figurineId, rate)
 	if pending <= 0 then
 		return 0
@@ -989,7 +999,7 @@ function FigurineService:GrantFromCapsule(player, capsuleInfo)
 		return nil, false
 	end
 
-	local result = DataService:AddFigurine(player, figurineId)
+	local result = DataService:AddFigurine(player, figurineId, capsuleInfo.Rarity)
 	local added = result and result.IsNew
 	if added then
 		placeFigurineModel(player, figurineInfo)
@@ -1000,6 +1010,7 @@ function FigurineService:GrantFromCapsule(player, capsuleInfo)
 		local state = getPlayerState(player)
 		local entry = state.UiEntries[figurineId]
 		updateLevelLabel(player, figurineId, entry)
+		updateMoneyLabel(player, figurineId, entry)
 	end
 
 	return figurineInfo, added

@@ -1,4 +1,4 @@
---[[
+﻿--[[
 脚本名称: FigurineConfig
 脚本类型: ModuleScript
 脚本位置: ReplicatedStorage/Config/FigurineConfig
@@ -18,6 +18,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Leaf/LBB01",
 		ShowcasePath = "ShowCase/Green/Position1",
 		ClaimButtonPath = "ButtonGreen/Button1",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 10002,
@@ -28,6 +29,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Leaf/LBB02",
 		ShowcasePath = "ShowCase/Green/Position2",
 		ClaimButtonPath = "ButtonGreen/Button2",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 10003,
@@ -38,6 +40,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Leaf/LBB03",
 		ShowcasePath = "ShowCase/Green/Position3",
 		ClaimButtonPath = "ButtonGreen/Button3",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 10004,
@@ -48,6 +51,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Leaf/LBB04",
 		ShowcasePath = "ShowCase/Green/Position4",
 		ClaimButtonPath = "ButtonGreen/Button4",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 10005,
@@ -58,6 +62,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Leaf/LBB05",
 		ShowcasePath = "ShowCase/Green/Position5",
 		ClaimButtonPath = "ButtonGreen/Button5",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 10006,
@@ -68,6 +73,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Leaf/LBB06",
 		ShowcasePath = "ShowCase/Green/Position6",
 		ClaimButtonPath = "ButtonGreen/Button6",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 10007,
@@ -78,6 +84,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Leaf/LBB07",
 		ShowcasePath = "ShowCase/Green/Position7",
 		ClaimButtonPath = "ButtonGreen/Button7",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 10008,
@@ -88,6 +95,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Leaf/LBB08",
 		ShowcasePath = "ShowCase/Green/Position8",
 		ClaimButtonPath = "ButtonGreen/Button8",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 10009,
@@ -98,6 +106,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Leaf/LBB09",
 		ShowcasePath = "ShowCase/Green/Position9",
 		ClaimButtonPath = "ButtonGreen/Button9",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 20001,
@@ -108,6 +117,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Water/LBB01",
 		ShowcasePath = "ShowCase/Blue/Position1",
 		ClaimButtonPath = "ButtonBlue/Button1",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 20002,
@@ -118,6 +128,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Water/LBB02",
 		ShowcasePath = "ShowCase/Blue/Position2",
 		ClaimButtonPath = "ButtonBlue/Button2",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 20003,
@@ -128,6 +139,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Water/LBB03",
 		ShowcasePath = "ShowCase/Blue/Position3",
 		ClaimButtonPath = "ButtonBlue/Button3",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 20004,
@@ -138,6 +150,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Water/LBB04",
 		ShowcasePath = "ShowCase/Blue/Position4",
 		ClaimButtonPath = "ButtonBlue/Button4",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 20005,
@@ -148,6 +161,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Water/LBB05",
 		ShowcasePath = "ShowCase/Blue/Position5",
 		ClaimButtonPath = "ButtonBlue/Button5",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 20006,
@@ -158,6 +172,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Water/LBB06",
 		ShowcasePath = "ShowCase/Blue/Position6",
 		ClaimButtonPath = "ButtonBlue/Button6",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 20007,
@@ -168,6 +183,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Water/LBB07",
 		ShowcasePath = "ShowCase/Blue/Position7",
 		ClaimButtonPath = "ButtonBlue/Button7",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 20008,
@@ -178,6 +194,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Water/LBB07",
 		ShowcasePath = "ShowCase/Blue/Position8",
 		ClaimButtonPath = "ButtonBlue/Button8",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 20009,
@@ -188,6 +205,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Water/LBB09",
 		ShowcasePath = "ShowCase/Blue/Position9",
 		ClaimButtonPath = "ButtonBlue/Button9",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 30001,
@@ -198,6 +216,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Lunar/LBB01",
 		ShowcasePath = "ShowCase/Purple/Position1",
 		ClaimButtonPath = "ButtonPurple/Button1",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 30002,
@@ -208,6 +227,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Lunar/LBB02",
 		ShowcasePath = "ShowCase/Purple/Position2",
 		ClaimButtonPath = "ButtonPurple/Button2",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 30003,
@@ -218,6 +238,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Lunar/LBB02",
 		ShowcasePath = "ShowCase/Purple/Position3",
 		ClaimButtonPath = "ButtonPurple/Button3",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 30004,
@@ -228,6 +249,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Lunar/LBB02",
 		ShowcasePath = "ShowCase/Purple/Position4",
 		ClaimButtonPath = "ButtonPurple/Button4",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 30005,
@@ -238,6 +260,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Lunar/LBB02",
 		ShowcasePath = "ShowCase/Purple/Position5",
 		ClaimButtonPath = "ButtonPurple/Button5",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 30006,
@@ -248,6 +271,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Lunar/LBB02",
 		ShowcasePath = "ShowCase/Purple/Position6",
 		ClaimButtonPath = "ButtonPurple/Button6",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 30007,
@@ -258,6 +282,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Lunar/LBB02",
 		ShowcasePath = "ShowCase/Purple/Position7",
 		ClaimButtonPath = "ButtonPurple/Button7",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 30008,
@@ -268,6 +293,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Lunar/LBB02",
 		ShowcasePath = "ShowCase/Purple/Position8",
 		ClaimButtonPath = "ButtonPurple/Button8",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 30009,
@@ -278,6 +304,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Lunar/LBB02",
 		ShowcasePath = "ShowCase/Purple/Position9",
 		ClaimButtonPath = "ButtonPurple/Button9",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 40001,
@@ -288,6 +315,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Solar/LBB01",
 		ShowcasePath = "ShowCase/Orange/Position1",
 		ClaimButtonPath = "ButtonOrange/Button1",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 40002,
@@ -298,6 +326,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Solar/LBB02",
 		ShowcasePath = "ShowCase/Orange/Position2",
 		ClaimButtonPath = "ButtonOrange/Button2",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 40003,
@@ -308,6 +337,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Solar/LBB03",
 		ShowcasePath = "ShowCase/Orange/Position3",
 		ClaimButtonPath = "ButtonOrange/Button3",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 40004,
@@ -318,6 +348,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Solar/LBB04",
 		ShowcasePath = "ShowCase/Orange/Position4",
 		ClaimButtonPath = "ButtonOrange/Button4",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 40005,
@@ -328,6 +359,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Solar/LBB04",
 		ShowcasePath = "ShowCase/Orange/Position5",
 		ClaimButtonPath = "ButtonOrange/Button5",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 40006,
@@ -338,6 +370,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Solar/LBB04",
 		ShowcasePath = "ShowCase/Orange/Position6",
 		ClaimButtonPath = "ButtonOrange/Button6",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 40007,
@@ -348,6 +381,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Solar/LBB04",
 		ShowcasePath = "ShowCase/Orange/Position7",
 		ClaimButtonPath = "ButtonOrange/Button7",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 40008,
@@ -358,6 +392,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Solar/LBB04",
 		ShowcasePath = "ShowCase/Orange/Position8",
 		ClaimButtonPath = "ButtonOrange/Button8",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 40009,
@@ -368,6 +403,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Solar/LBB04",
 		ShowcasePath = "ShowCase/Orange/Position9",
 		ClaimButtonPath = "ButtonOrange/Button9",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 50001,
@@ -378,6 +414,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Flame/LBB01",
 		ShowcasePath = "ShowCase/Red/Position1",
 		ClaimButtonPath = "ButtonRed/Button1",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 50002,
@@ -388,6 +425,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Flame/LBB01",
 		ShowcasePath = "ShowCase/Red/Position2",
 		ClaimButtonPath = "ButtonRed/Button2",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 50003,
@@ -398,6 +436,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Flame/LBB01",
 		ShowcasePath = "ShowCase/Red/Position3",
 		ClaimButtonPath = "ButtonRed/Button3",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 50004,
@@ -408,6 +447,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Flame/LBB01",
 		ShowcasePath = "ShowCase/Red/Position4",
 		ClaimButtonPath = "ButtonRed/Button4",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 50005,
@@ -418,6 +458,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Flame/LBB01",
 		ShowcasePath = "ShowCase/Red/Position5",
 		ClaimButtonPath = "ButtonRed/Button5",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 50006,
@@ -428,6 +469,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Flame/LBB01",
 		ShowcasePath = "ShowCase/Red/Position6",
 		ClaimButtonPath = "ButtonRed/Button6",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 50007,
@@ -438,6 +480,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Flame/LBB01",
 		ShowcasePath = "ShowCase/Red/Position7",
 		ClaimButtonPath = "ButtonRed/Button7",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 60001,
@@ -448,6 +491,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Heart/LBB01",
 		ShowcasePath = "ShowCase/Yellow/Position1",
 		ClaimButtonPath = "ButtonYellow/Button1",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 60002,
@@ -458,6 +502,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Heart/LBB02",
 		ShowcasePath = "ShowCase/Yellow/Position2",
 		ClaimButtonPath = "ButtonYellow/Button2",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 60003,
@@ -468,6 +513,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Heart/LBB03",
 		ShowcasePath = "ShowCase/Yellow/Position3",
 		ClaimButtonPath = "ButtonYellow/Button3",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 60004,
@@ -478,6 +524,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Heart/LBB04",
 		ShowcasePath = "ShowCase/Yellow/Position4",
 		ClaimButtonPath = "ButtonYellow/Button4",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 60005,
@@ -488,6 +535,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Heart/LBB04",
 		ShowcasePath = "ShowCase/Yellow/Position5",
 		ClaimButtonPath = "ButtonYellow/Button5",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 60006,
@@ -498,6 +546,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Heart/LBB04",
 		ShowcasePath = "ShowCase/Yellow/Position6",
 		ClaimButtonPath = "ButtonYellow/Button6",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 60007,
@@ -508,6 +557,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Heart/LBB04",
 		ShowcasePath = "ShowCase/Yellow/Position7",
 		ClaimButtonPath = "ButtonYellow/Button7",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 70001,
@@ -518,6 +568,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Heart/LBB01",
 		ShowcasePath = "ShowCase/Blue/Position1",
 		ClaimButtonPath = "ButtonBlue/Button1",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 70002,
@@ -528,6 +579,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Heart/LBB02",
 		ShowcasePath = "ShowCase/Blue/Position2",
 		ClaimButtonPath = "ButtonBlue/Button2",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 70003,
@@ -538,6 +590,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Heart/LBB03",
 		ShowcasePath = "ShowCase/Blue/Position3",
 		ClaimButtonPath = "ButtonBlue/Button3",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 70004,
@@ -548,6 +601,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Heart/LBB04",
 		ShowcasePath = "ShowCase/Blue/Position4",
 		ClaimButtonPath = "ButtonBlue/Button4",
+		Icon = "rbxassetid://17449975508",
 	},
 	{
 		Id = 70005,
@@ -558,6 +612,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Heart/LBB04",
 		ShowcasePath = "ShowCase/Blue/Position5",
 		ClaimButtonPath = "ButtonBlue/Button5",
+		Icon = "rbxassetid://17449975508",
 	},
 }
 
@@ -571,3 +626,4 @@ function FigurineConfig.GetById(id)
 end
 
 return FigurineConfig
+

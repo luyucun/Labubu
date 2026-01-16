@@ -582,3 +582,250 @@ id	手办名字	金币基础产速	品质	稀有度	模型资源	对应展台路
 13	235
 14	335
 15	455
+
+
+策划文档V2.2 手办产速计算
+
+概述：我们的手办存在等级/品质/稀有度三个维度，每个手办有自己的基础产速，我们设定一个公式来确定一个手办的最终产速
+
+最终一个手办的产速公式是：最终金币产速=基础产速*稀有度系数*（1+（等级-1）*品质系数）
+
+我们的不同品质的手办的品质系数是：
+
+品质	升级系数 
+1	0.05
+2	0.08
+3	0.12
+4	0.18
+5	0.25
+6	0.35
+7	0.5
+
+不同稀有度的系数是：
+稀有度	系数
+1	1
+2	1.25
+3	1.8
+4	2.6
+5	4.6
+
+我们的每个手办都有其品质是固定的，这个属性直接读表即可
+
+关于稀有度的规则是这样的：
+我们有不同稀有度的盲盒，比如有稀有度1品质1的盲盒，稀有度2品质1的盲盒，稀有度3品质1的盲盒，或者稀有度1品质3，或者稀有度4品质3的盲盒
+
+相同品质的盲盒，开出的手办id是永远固定的，比如稀有度1品质1和稀有度3品质1的盲盒，都只能开出品质1的手办，卡池是固定的
+但是稀有度1品质1的盲盒开出的手办稀有度都是1，稀有度2品质1的盲盒开出的手办稀有度都是2
+当一个手办有更高稀有度出现时，将这个手办的稀有度改成更高的稀有度
+比如10001这个手办，之前都是稀有度1里面开出来的，那这个手办当前的稀有度就是1，按稀有度1的参数计算，如果在稀有度3的盒子里开出了这个10001的手办，那我的这个手办的稀有度就变成3，产速计算时也按稀有度3的参数算
+
+
+策划文档V2.3 盲盒开启进度条
+
+每个盲盒都有开启倒计时，被放在地上后会开始倒计时，玩家需要看到倒计时进度
+
+具体规则是：
+1.盲盒被放到地上后，立刻去ReplicatedStorage下复制OpenProgresTemplate，挂载给地上这个盲盒模型，直接做盲盒的子节点
+2.OpenProgresTemplate - Bg - Progressbar的Size（用scale大小）变化来表达进度变化。Size的X轴大小是0就代表倒计时刚开始，Size的X轴大小是1就代表倒计时结束
+3.OpenProgresTemplate - Bg - Text是一个文本，倒计时在倒计时过程中，需要把文本内容改成：xx:yy，xx是分钟，yy是秒，根据我们的倒计时去转换成分秒即可，但是如果时间大于1小时，xx就是小时，yy就是分钟
+4.如果倒计时完成后，需要把Text的文本改成Ready!
+
+
+策划文档V2.4 完善一下数据表，给盲盒和手办加图标
+
+这是修改后的手办表：
+id	手办名字	金币基础产速	品质	稀有度	模型资源	对应展台路径	对应领取按钮路径	手办icon
+10001	绿叶布布1	1	1	1	Leaf/LBB01	ShowCase/Green/Position1	ButtonGreen/Button1	rbxassetid://17449975508
+10002	绿叶布布2	2	1	1	Leaf/LBB02	ShowCase/Green/Position2	ButtonGreen/Button2	rbxassetid://17449975508
+10003	绿叶布布3	3	1	1	Leaf/LBB03	ShowCase/Green/Position3	ButtonGreen/Button3	rbxassetid://17449975508
+10004	绿叶布布4	4	1	1	Leaf/LBB04	ShowCase/Green/Position4	ButtonGreen/Button4	rbxassetid://17449975508
+10005	绿叶布布5	5	1	1	Leaf/LBB05	ShowCase/Green/Position5	ButtonGreen/Button5	rbxassetid://17449975508
+10006	绿叶布布6	6	1	1	Leaf/LBB06	ShowCase/Green/Position6	ButtonGreen/Button6	rbxassetid://17449975508
+10007	绿叶布布7	7	1	1	Leaf/LBB07	ShowCase/Green/Position7	ButtonGreen/Button7	rbxassetid://17449975508
+10008	绿叶布布8	8	1	1	Leaf/LBB08	ShowCase/Green/Position8	ButtonGreen/Button8	rbxassetid://17449975508
+10009	绿叶布布9	10	1	1	Leaf/LBB09	ShowCase/Green/Position9	ButtonGreen/Button9	rbxassetid://17449975508
+20001	水布布1	50	2	1	Water/LBB01	ShowCase/Blue/Position1	ButtonBlue/Button1	rbxassetid://17449975508
+20002	水布布2	56	2	1	Water/LBB02	ShowCase/Blue/Position2	ButtonBlue/Button2	rbxassetid://17449975508
+20003	水布布3	63	2	1	Water/LBB03	ShowCase/Blue/Position3	ButtonBlue/Button3	rbxassetid://17449975508
+20004	水布布4	71	2	1	Water/LBB04	ShowCase/Blue/Position4	ButtonBlue/Button4	rbxassetid://17449975508
+20005	水布布5	80	2	1	Water/LBB05	ShowCase/Blue/Position5	ButtonBlue/Button5	rbxassetid://17449975508
+20006	水布布6	90	2	1	Water/LBB06	ShowCase/Blue/Position6	ButtonBlue/Button6	rbxassetid://17449975508
+20007	水布布7	102	2	1	Water/LBB07	ShowCase/Blue/Position7	ButtonBlue/Button7	rbxassetid://17449975508
+20008	水布布8	116	2	1	Water/LBB07	ShowCase/Blue/Position8	ButtonBlue/Button8	rbxassetid://17449975508
+20009	水布布9	132	2	1	Water/LBB09	ShowCase/Blue/Position9	ButtonBlue/Button9	rbxassetid://17449975508
+30001	月球布布1	220	3	1	Lunar/LBB01	ShowCase/Purple/Position1	ButtonPurple/Button1	rbxassetid://17449975508
+30002	月球布布2	250	3	1	Lunar/LBB02	ShowCase/Purple/Position2	ButtonPurple/Button2	rbxassetid://17449975508
+30003	月球布布3	285	3	1	Lunar/LBB02	ShowCase/Purple/Position3	ButtonPurple/Button3	rbxassetid://17449975508
+30004	月球布布4	325	3	1	Lunar/LBB02	ShowCase/Purple/Position4	ButtonPurple/Button4	rbxassetid://17449975508
+30005	月球布布5	370	3	1	Lunar/LBB02	ShowCase/Purple/Position5	ButtonPurple/Button5	rbxassetid://17449975508
+30006	月球布布6	420	3	1	Lunar/LBB02	ShowCase/Purple/Position6	ButtonPurple/Button6	rbxassetid://17449975508
+30007	月球布布7	480	3	1	Lunar/LBB02	ShowCase/Purple/Position7	ButtonPurple/Button7	rbxassetid://17449975508
+30008	月球布布8	550	3	1	Lunar/LBB02	ShowCase/Purple/Position8	ButtonPurple/Button8	rbxassetid://17449975508
+30009	月球布布9	630	3	1	Lunar/LBB02	ShowCase/Purple/Position9	ButtonPurple/Button9	rbxassetid://17449975508
+40001	太阳布布1	950	4	1	Solar/LBB01	ShowCase/Orange/Position1	ButtonOrange/Button1	rbxassetid://17449975508
+40002	太阳布布2	1080	4	1	Solar/LBB02	ShowCase/Orange/Position2	ButtonOrange/Button2	rbxassetid://17449975508
+40003	太阳布布3	1230	4	1	Solar/LBB03	ShowCase/Orange/Position3	ButtonOrange/Button3	rbxassetid://17449975508
+40004	太阳布布4	1400	4	1	Solar/LBB04	ShowCase/Orange/Position4	ButtonOrange/Button4	rbxassetid://17449975508
+40005	太阳布布5	1600	4	1	Solar/LBB04	ShowCase/Orange/Position5	ButtonOrange/Button5	rbxassetid://17449975508
+40006	太阳布布6	1830	4	1	Solar/LBB04	ShowCase/Orange/Position6	ButtonOrange/Button6	rbxassetid://17449975508
+40007	太阳布布7	2100	4	1	Solar/LBB04	ShowCase/Orange/Position7	ButtonOrange/Button7	rbxassetid://17449975508
+40008	太阳布布8	2400	4	1	Solar/LBB04	ShowCase/Orange/Position8	ButtonOrange/Button8	rbxassetid://17449975508
+40009	太阳布布9	2750	4	1	Solar/LBB04	ShowCase/Orange/Position9	ButtonOrange/Button9	rbxassetid://17449975508
+50001	火焰布布1	3000	5	1	Flame/LBB01	ShowCase/Red/Position1	ButtonRed/Button1	rbxassetid://17449975508
+50002	火焰布布2	3400	5	1	Flame/LBB01	ShowCase/Red/Position2	ButtonRed/Button2	rbxassetid://17449975508
+50003	火焰布布3	3850	5	1	Flame/LBB01	ShowCase/Red/Position3	ButtonRed/Button3	rbxassetid://17449975508
+50004	火焰布布4	4350	5	1	Flame/LBB01	ShowCase/Red/Position4	ButtonRed/Button4	rbxassetid://17449975508
+50005	火焰布布5	4900	5	1	Flame/LBB01	ShowCase/Red/Position5	ButtonRed/Button5	rbxassetid://17449975508
+50006	火焰布布6	5550	5	1	Flame/LBB01	ShowCase/Red/Position6	ButtonRed/Button6	rbxassetid://17449975508
+50007	火焰布布7	6300	5	1	Flame/LBB01	ShowCase/Red/Position7	ButtonRed/Button7	rbxassetid://17449975508
+60001	心脏布布1	12000	6	1	Heart/LBB01	ShowCase/Yellow/Position1	ButtonYellow/Button1	rbxassetid://17449975508
+60002	心脏布布2	13200	6	1	Heart/LBB02	ShowCase/Yellow/Position2	ButtonYellow/Button2	rbxassetid://17449975508
+60003	心脏布布3	14600	6	1	Heart/LBB03	ShowCase/Yellow/Position3	ButtonYellow/Button3	rbxassetid://17449975508
+60004	心脏布布4	16200	6	1	Heart/LBB04	ShowCase/Yellow/Position4	ButtonYellow/Button4	rbxassetid://17449975508
+60005	心脏布布5	18000	6	1	Heart/LBB04	ShowCase/Yellow/Position5	ButtonYellow/Button5	rbxassetid://17449975508
+60006	心脏布布6	20000	6	1	Heart/LBB04	ShowCase/Yellow/Position6	ButtonYellow/Button6	rbxassetid://17449975508
+60007	心脏布布7	22300	6	1	Heart/LBB04	ShowCase/Yellow/Position7	ButtonYellow/Button7	rbxassetid://17449975508
+70001	虚空布布1	33000	7	1	Heart/LBB01	ShowCase/Blue/Position1	ButtonBlue/Button1	rbxassetid://17449975508
+70002	虚空布布2	38000	7	1	Heart/LBB02	ShowCase/Blue/Position2	ButtonBlue/Button2	rbxassetid://17449975508
+70003	虚空布布3	44000	7	1	Heart/LBB03	ShowCase/Blue/Position3	ButtonBlue/Button3	rbxassetid://17449975508
+70004	虚空布布4	51000	7	1	Heart/LBB04	ShowCase/Blue/Position4	ButtonBlue/Button4	rbxassetid://17449975508
+70005	虚空布布5	59000	7	1	Heart/LBB04	ShowCase/Blue/Position5	ButtonBlue/Button5	rbxassetid://17449975508
+
+
+这是修改后的盲盒表：
+
+Id	盲盒名字	盲盒品质	盲盒稀有度	盲盒模型名字	盲盒价格	开启倒计时（秒）	盲盒对应卡池	盲盒icon
+1001	Leaf	1	1	LeafCommon	50 	8	99001	rbxassetid://98616255072587
+1002	Water	2	1	WaterCommon	1500 	40	99001	rbxassetid://98616255072587
+1003	Lunar	3	1	LunarCommon	20000 	140	99001	rbxassetid://98616255072587
+1004	Solar	4	1	SolarCommon	180000 	480	99001	rbxassetid://98616255072587
+1005	Flame	5	1	FlameCommon	1200000 	1800	99001	rbxassetid://98616255072587
+1006	Heart	6	1	HeartCommon	5000000 	6600	99001	rbxassetid://98616255072587
+1007	Celestial	7	1	CelestialCommon	20000000 	19800	99001	rbxassetid://98616255072587
+2001	Leaf	1	2	LeafLight	100 	9	99001	rbxassetid://98616255072587
+2002	Water	2	2	WaterLight	3000 	44	99001	rbxassetid://98616255072587
+2003	Lunar	3	2	LunarLight	40000 	154	99001	rbxassetid://98616255072587
+2004	Solar	4	2	SolarLight	360000 	528	99001	rbxassetid://98616255072587
+2005	Flame	5	2	FlameLight	2400000 	1980	99001	rbxassetid://98616255072587
+2006	Heart	6	2	HeartLight	10000000 	7260	99001	rbxassetid://98616255072587
+2007	Celestial	7	2	CelestialLight	40000000 	21780	99001	rbxassetid://98616255072587
+3001	Leaf	1	3	LeafGold	300 	10	99001	rbxassetid://98616255072587
+3002	Water	2	3	WaterGold	9000 	50	99001	rbxassetid://98616255072587
+3003	Lunar	3	3	LunarGold	120000 	175	99001	rbxassetid://98616255072587
+3004	Solar	4	3	SolarGold	1080000 	600	99001	rbxassetid://98616255072587
+3005	Flame	5	3	FlameGold	7200000 	2250	99001	rbxassetid://98616255072587
+3006	Heart	6	3	HeartGold	30000000 	8250	99001	rbxassetid://98616255072587
+3007	Celestial	7	3	CelestialGold	120000000 	24750	99001	rbxassetid://98616255072587
+4001	Leaf	1	4	LeafDiamond	750 	12	99001	rbxassetid://98616255072587
+4002	Water	2	4	WaterDiamond	22500 	58	99001	rbxassetid://98616255072587
+4003	Lunar	3	4	LunarDiamond	300000 	203	99001	rbxassetid://98616255072587
+4004	Solar	4	4	SolarDiamond	2700000 	696	99001	rbxassetid://98616255072587
+4005	Flame	5	4	FlameDiamond	18000000 	2610	99001	rbxassetid://98616255072587
+4006	Heart	6	4	HeartDiamond	75000000 	9570	99001	rbxassetid://98616255072587
+4007	Celestial	7	4	CelestialDiamond	300000000 	28710	99001	rbxassetid://98616255072587
+5001	Leaf	1	5	LeafRainbow	2500 	14	99001	rbxassetid://98616255072587
+5002	Water	2	5	WaterRainbow	75000 	68	99001	rbxassetid://98616255072587
+5003	Lunar	3	5	LunarRainbow	1000000 	238	99001	rbxassetid://98616255072587
+5004	Solar	4	5	SolarRainbow	9000000 	816	99001	rbxassetid://98616255072587
+5005	Flame	5	5	FlameRainbow	60000000 	3060	99001	rbxassetid://98616255072587
+5006	Heart	6	5	HeartRainbow	250000000 	11220	99001	rbxassetid://98616255072587
+5007	Celestial	7	5	CelestialRainbow	1000000000 	33660	99001	rbxassetid://98616255072587
+
+
+策划文档V2.5 新的背包
+
+概述：现在的背包用的是系统默认的背包，我们要改成我自制的背包ui
+
+详细规则：
+1.StarterGui - BackpackGui - BackpackFrame是我的背包页面，当玩家背包中的盲盒数大于等于1时，就显示出来（visible属性改成true），如果没有盲盒就改成false
+2.BackpackGui - BackpackFrame - ItemListFrame - ArmyTemplate是盲盒信息模板，需要生成时，就复制一份出来，把visible属性改成True，并且更正对应的信息
+3.ArmyTemplate - Icon是盲盒图标，用于显示盲盒的图标
+4.ArmyTemplate - Number是textlabel，用于显示盲盒的数量，格式固定是：*x，x是该盲盒拥有的数量
+5.点击背包中的任意一个盲盒，也可以触发拿到手里，这个逻辑和默认背包是一样的
+6.新的背包系统不限制盲盒的拥有数量
+
+
+策划文档V2.6 盲盒背包界面
+
+我们的玩家购买了很多盲盒后，需要有一个统一查看的地方，现在是在背包中展示，但是我希望做一个ui，在ui中展示所有的盲盒
+
+详细规则：
+
+1.玩家点击StarterGui - MainGui - Bag这个按钮，打开盲盒背包界面（把StarterGui - Bag - BagBg的Visible属性改成True）
+2.点击StarterGui - Bag - BagBg - Title - CloseButton按钮，关闭盲盒界面（把StarterGui - Bag - BagBg的Visible属性改成false）
+3.StarterGui - Bag - BagBg - ScrollingFrame 是用来容纳所有我有的盲盒的列表，其中ScrollingFrame - CapsuleTemplate是盲盒信息模板，要生成盲盒信息时去复制CapsuleTemplate，并更改其信息，生成一个盲盒信息
+4.CapsuleTemplate - Icon是盲盒的图标，CapsuleTemplate - Name是盲盒的名字，CapsuleTemplate - Number是盲盒的拥有数量
+5.盲盒的排序按盲盒表中的id，Id越大，越排在前面
+
+
+关于盲盒列表的筛选：
+
+1.StarterGui - Bag - BagBg - TabList - ScrollingFrame下放了一些按钮，这些按钮主要是用来对盲盒的筛选
+2.点击 TabList - ScrollingFrame - Leaf按钮，只显示所有品质1的盲盒
+3.点击 TabList - ScrollingFrame - Water按钮，只显示所有品质2的盲盒
+4.点击 TabList - ScrollingFrame - Lunar按钮，只显示所有品质3的盲盒
+5.点击 TabList - ScrollingFrame - Solar按钮，只显示所有品质4的盲盒
+6.点击 TabList - ScrollingFrame - Flame按钮，只显示所有品质5的盲盒
+7.点击 TabList - ScrollingFrame - Heart按钮，只显示所有品质6的盲盒
+8.点击 TabList - ScrollingFrame - Celestial按钮，只显示所有品质7的盲盒
+9.点击 TabList - ScrollingFrame - Total按钮，显示所有盲盒
+10.每次打开界面，默认是显示所有盲盒
+
+
+策划文档V2.7 索引功能需求
+
+概述：我们要做一个索引功能，类似于图鉴一样的逻辑，具体规则见下面
+
+详细规则：
+
+1.玩家点击StarterGui - MainGui - Index这个按钮，打开Index索引界面（把StarterGui - Index - IndexBg的Visible属性改成True）
+2.玩家点击StarterGui - Index - IndexBg - Title - CloseButton按钮，关闭Index索引界面（把StarterGui - Index - IndexBg的Visible属性改成False）
+3.我们的手办是分品质的，所以我们的索引界面，是要按品质来进行显示的，每个品质列表下只显示该品质的手办
+
+4.StarterGui - Index - IndexBg - TabList - ScrollingFrame下有多个按钮，每个按钮分别对应各自品质的手办筛选，具体的逻辑是：
+
+    a.ScrollingFrame - Leaf,对应品质1
+    b.ScrollingFrame - Water,对应品质2
+    c.ScrollingFrame - Lunar,对应品质3
+    d.ScrollingFrame - Solar,对应品质4
+    e.ScrollingFrame - Flame,对应品质5
+    f.ScrollingFrame - Heart,对应品质6
+    g.ScrollingFrame - Celestial,对应品质7
+
+5.下面是详细的单个手办展示的信息规则：
+    a.StarterGui - Index - IndexBg - InfoBg - ScrollingFrame是用于承载每个品质下所有手办信息的列表容器
+    b.ScrollingFrame - FigurineTemplate是手办信息模板，要生成手办信息时，去复制一份FigurineTemplate，然后更改信息，即成为一个手办信息
+    c.FigurineTemplate - Icon是手办图标，FigurineTemplate - Name是手办名字，根据手办数据生成对应信息即可
+    d.这个Index列表中展示的是所有的手办，所以每次我更新了新的手办，列表里也要对应生成新的手办的信息，每次登录游戏后更新一轮数据即可，不用每次打开界面都去更新
+    e.某个手办如果玩家已经获得了，就保持默认状态即可
+    f.某个手办如果玩家没有获得，则需要把：FigurineTemplate - Name隐藏，把FigurineTemplate - Icon的ImageColor3的颜色改成纯黑（注意一定是ImageColor3属性），同时把FigurineTemplate - QuestionMark的Visible属性改成True
+
+6.手办列表按表中的顺序从上到下排列即可
+7.StarterGui - Index - IndexBg - InfoBg - CurrentNum是一个textlabel，用于显示当前这个品质玩家获得的手办数量，比如这个品质共9个手办，玩家获得了3个，就显示为3/9
+8.StarterGui - Index - IndexBg - InfoBg - TotalNum是一个textlabel，用于所有手办玩家获情况，比如所有品质手办加起来共20个手办，玩家获得了3个，就显示为3/20
+9.以上两个信息玩家每次打开界面时都需要实时更新数值状态
+
+
+策划文档V2.8 检视功能
+
+我们需要对我们的手办进行检视，具体的逻辑是
+
+1.在Index界面，每个手办信息界面下，都有个按钮叫CheckIcon，比如InfoBg - ScrollingFrame - FigurineTemplate - CheckIcon
+2.未解锁的手办，需要把CheckIcon的Visible属性设定为False，已经解锁的手办才设定为True
+3.玩家点击CheckIcon按钮，触发对这个手办的检视，具体表现是：
+    1）.关闭Index界面与Backpack界面
+    2）.将StarterGui - Check - CheckBg的Visible属性改成True
+    3）.在Check - CheckBg - ViewportFrame中加载我们的手办模型，每个手办模型都有配置的具体的模型名字
+    4）.玩家点击Check - CheckBg - Exit按钮可以关闭检视界面，并再次自动打开Index界面，并且要回到刚才检视这个手办的那个定位位置
+    5）.模型在界面上加载出来后，我们可以对模型进行检视，具体的检视的逻辑是：
+        a.加载的模型需要确保能够正好显示在ViewportFrame中
+        b.模型需要正对屏幕中心
+        c.玩家可以通过拖动鼠标或者在手机屏幕上来回滑动触发对模型的检视
+        d.比如我鼠标向右移动，模型就向右旋转，向左移动就向左旋转，向下移动就向下旋转
+        e.但是注意：每个模型的检视都有旋转限制，比如朝某个方向最多旋转30度。
+        f.具体的旋转跟随鼠标或者手指的效果我也不懂具体逻辑，你可以看下面这些图片，是竞品的检视效果，我们做成一样即可：
+        图片分别是："D:\RobloxGame\Labubu\Labubu\默认状态.png"
+        "D:\RobloxGame\Labubu\Labubu\鼠标向右滑动到极限.png"
+        "D:\RobloxGame\Labubu\Labubu\鼠标向左滑动到极限.png"
+        "D:\RobloxGame\Labubu\Labubu\鼠标向下滑动到极限.png"
+        "D:\RobloxGame\Labubu\Labubu\鼠标向上滑动到极限.png"

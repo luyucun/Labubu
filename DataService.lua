@@ -1,4 +1,4 @@
---[[
+﻿--[[
 脚本名称: DataService
 脚本类型: ModuleScript
 脚本位置: ServerScriptService/Server/DataService
@@ -12,6 +12,7 @@ local HttpService = game:GetService("HttpService")
 
 local GameConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("GameConfig"))
 local FigurineConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("FigurineConfig"))
+local FigurineRateConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("FigurineRateConfig"))
 local UpgradeConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("UpgradeConfig"))
 
 local DataService = {}
@@ -59,6 +60,22 @@ local function normalizeFigurines(figurines)
 	return normalized
 end
 
+local function normalizeRarity(value)
+	local num = tonumber(value)
+	if not num then
+		return 1
+	end
+	num = math.floor(num)
+	if num < 1 then
+		return 1
+	end
+	local maxRarity = FigurineRateConfig.GetMaxRarity()
+	if num > maxRarity then
+		return maxRarity
+	end
+	return num
+end
+
 local function normalizeFigurineStates(states)
 	if type(states) ~= "table" then
 		return {}
@@ -68,6 +85,8 @@ local function normalizeFigurineStates(states)
 	for key, value in pairs(states) do
 		local id = tonumber(key) or key
 		if id then
+			local baseInfo = FigurineConfig.GetById(id)
+			local defaultRarity = normalizeRarity(baseInfo and baseInfo.Rarity or 1)
 			if type(value) == "table" then
 				local state = {}
 				for k, v in pairs(value) do
@@ -87,7 +106,7 @@ local function normalizeFigurineStates(states)
 				end
 				state.Level = level
 				if state.Exp == nil then
-					state.Exp = 1
+					state.Exp = 0
 				else
 					local exp = tonumber(state.Exp)
 					if not exp or exp < 0 then
@@ -95,14 +114,75 @@ local function normalizeFigurineStates(states)
 					end
 					state.Exp = math.floor(exp)
 				end
+				if state.Rarity == nil then
+					state.Rarity = defaultRarity
+				else
+					state.Rarity = normalizeRarity(state.Rarity)
+				end
 				normalized[id] = state
 			elseif type(value) == "number" then
-				normalized[id] = { LastCollectTime = value, Level = 1, Exp = 1 }
+				normalized[id] = { LastCollectTime = value, Level = 1, Exp = 0, Rarity = defaultRarity }
 			end
 		end
 	end
 
 	return normalized
+end
+
+local function normalizeEggs(eggs)
+	if type(eggs) ~= "table" then
+		return {}, true
+	end
+
+	local normalized = {}
+	local changed = false
+
+	local function addEntry(eggId, uid)
+		local id = tonumber(eggId)
+		if not id then
+			changed = true
+			return
+		end
+		local finalUid = uid
+		if type(finalUid) ~= "string" or finalUid == "" then
+			finalUid = HttpService:GenerateGUID(false)
+			changed = true
+		end
+		if id ~= eggId or finalUid ~= uid then
+			changed = true
+		end
+		table.insert(normalized, { Uid = finalUid, EggId = id })
+	end
+
+	local usedKeys = {}
+	if #eggs > 0 then
+		for index, value in ipairs(eggs) do
+			usedKeys[index] = true
+			if type(value) == "table" then
+				addEntry(value.EggId or value.Id or value.eggId, value.Uid or value.uid)
+			elseif type(value) == "number" or tonumber(value) then
+				addEntry(value, nil)
+			else
+				changed = true
+			end
+		end
+	end
+
+	for key, value in pairs(eggs) do
+		if not usedKeys[key] then
+			if type(value) == "table" then
+				local uid = value.Uid or value.uid or (type(key) == "string" and key or nil)
+				addEntry(value.EggId or value.Id or value.eggId, uid)
+			elseif type(value) == "number" or tonumber(value) then
+				local uid = type(key) == "string" and key or nil
+				addEntry(value, uid)
+			else
+				changed = true
+			end
+		end
+	end
+
+	return normalized, changed
 end
 
 local function normalizeCount(value)
@@ -135,6 +215,26 @@ local function normalizeExp(value)
 		return 0
 	end
 	return math.floor(num)
+end
+
+local function calculateFigurineRate(figurineInfo, state)
+	if not figurineInfo then
+		return 0
+	end
+	local baseRate = tonumber(figurineInfo.BaseRate) or 0
+	if baseRate <= 0 then
+		return 0
+	end
+	local level = normalizeLevel(state and state.Level)
+	local rarity = normalizeRarity((state and state.Rarity) or figurineInfo.Rarity)
+	local quality = tonumber(figurineInfo.Quality) or 1
+	local qualityCoeff = FigurineRateConfig.GetQualityCoeff(quality)
+	local rarityCoeff = FigurineRateConfig.GetRarityCoeff(rarity)
+	local levelFactor = 1 + (level - 1) * qualityCoeff
+	if levelFactor < 0 then
+		levelFactor = 0
+	end
+	return baseRate * rarityCoeff * levelFactor
 end
 
 local function normalizeCapsuleOpenById(stats)
@@ -172,7 +272,8 @@ local function calculateOutputSpeed(figurines, figurineStates)
 		if owned then
 			local info = FigurineConfig.GetById(tonumber(figurineId) or figurineId)
 			if info then
-				local rate = tonumber(info.BaseRate) or 0
+				local state = figurineStates and figurineStates[tonumber(figurineId) or figurineId]
+				local rate = calculateFigurineRate(info, state)
 				if rate > 0 then
 					total += rate
 				end
@@ -180,6 +281,10 @@ local function calculateOutputSpeed(figurines, figurineStates)
 		end
 	end
 	return total
+end
+
+function DataService:CalculateFigurineRate(figurineInfo, state)
+	return calculateFigurineRate(figurineInfo, state)
 end
 
 local function applyLevelExp(level, exp)
@@ -222,6 +327,67 @@ local function applyStatsAttributes(player, data)
 	player:SetAttribute("TotalPlayTime", normalizeCount(data.TotalPlayTime))
 	player:SetAttribute("CapsuleOpenTotal", normalizeCount(data.CapsuleOpenTotal))
 	player:SetAttribute("OutputSpeed", normalizeOutputSpeed(data.OutputSpeed))
+end
+
+local function ensureFigurineOwnedFolder(player)
+	if not player or not player.Parent then
+		return nil
+	end
+	local folder = player:FindFirstChild("FigurineOwned")
+	if not folder then
+		folder = Instance.new("Folder")
+		folder.Name = "FigurineOwned"
+		folder.Parent = player
+	end
+	return folder
+end
+
+local function setFigurineOwnedValue(player, figurineId, owned)
+	local folder = ensureFigurineOwnedFolder(player)
+	if not folder then
+		return
+	end
+	local name = tostring(figurineId)
+	local value = folder:FindFirstChild(name)
+	if owned then
+		if not value then
+			value = Instance.new("BoolValue")
+			value.Name = name
+			value.Parent = folder
+		end
+		value.Value = true
+	else
+		if value then
+			value:Destroy()
+		end
+	end
+end
+
+local function syncFigurineOwnedFolder(player, figurines)
+	local folder = ensureFigurineOwnedFolder(player)
+	if not folder then
+		return
+	end
+	local keep = {}
+	if type(figurines) == "table" then
+		for id, owned in pairs(figurines) do
+			if owned then
+				keep[tostring(id)] = true
+			end
+		end
+	end
+	for _, child in ipairs(folder:GetChildren()) do
+		if child:IsA("BoolValue") and not keep[child.Name] then
+			child:Destroy()
+		end
+	end
+	if type(figurines) == "table" then
+		for id, owned in pairs(figurines) do
+			if owned then
+				setFigurineOwnedValue(player, id, true)
+			end
+		end
+	end
 end
 
 local function updatePlaytimeRecord(record, player)
@@ -275,8 +441,9 @@ function DataService:LoadPlayer(player)
 		needsSave = true
 	end
 	data.FigurineStates = normalizeFigurineStates(data.FigurineStates)
-	if type(data.Eggs) ~= "table" then
-		data.Eggs = {}
+	local normalizedEggs, eggsChanged = normalizeEggs(data.Eggs)
+	data.Eggs = normalizedEggs
+	if eggsChanged then
 		needsSave = true
 	end
 	if type(data.PlacedEggs) ~= "table" then
@@ -326,6 +493,7 @@ function DataService:LoadPlayer(player)
 
 	applyCoinsAttribute(player, data.Coins)
 	applyStatsAttributes(player, data)
+	syncFigurineOwnedFolder(player, data.Figurines)
 	self:StartPlaytimeTracker(player)
 
 	return data
@@ -349,6 +517,20 @@ end
 function DataService:GetFigurineStates(player)
 	local record = sessionData[player.UserId]
 	return record and record.Data.FigurineStates or nil
+end
+
+function DataService:GetFigurineRate(player, figurineId)
+	local record = sessionData[player.UserId]
+	if not record then
+		return 0
+	end
+	local id = tonumber(figurineId) or figurineId
+	local info = FigurineConfig.GetById(id)
+	if not info then
+		return 0
+	end
+	local state = record.Data.FigurineStates and record.Data.FigurineStates[id]
+	return calculateFigurineRate(info, state)
 end
 
 function DataService:GetEggs(player)
@@ -382,7 +564,7 @@ function DataService:HasFigurine(player, figurineId)
 	return record.Data.Figurines[id] == true
 end
 
-function DataService:AddFigurine(player, figurineId)
+function DataService:AddFigurine(player, figurineId, capsuleRarity)
 	local record = sessionData[player.UserId]
 	if not record then
 		return nil
@@ -394,6 +576,9 @@ function DataService:AddFigurine(player, figurineId)
 		record.Data.FigurineStates = {}
 	end
 	local id = tonumber(figurineId) or figurineId
+	local info = FigurineConfig.GetById(id)
+	local defaultRarity = normalizeRarity(info and info.Rarity or 1)
+	local incomingRarity = normalizeRarity(capsuleRarity or defaultRarity)
 	local isNew = record.Data.Figurines[id] ~= true
 	if isNew then
 		record.Data.Figurines[id] = true
@@ -405,19 +590,38 @@ function DataService:AddFigurine(player, figurineId)
 		record.Data.FigurineStates[id] = state
 	end
 
+	if isNew then
+		state.Level = 1
+		state.Exp = 0
+		state.Rarity = incomingRarity
+	end
+
+	local rarityUpgraded = false
+	if not isNew then
+		local currentRarity = normalizeRarity(state.Rarity or defaultRarity)
+		if incomingRarity > currentRarity then
+			state.Rarity = incomingRarity
+			rarityUpgraded = true
+		elseif state.Rarity ~= currentRarity then
+			state.Rarity = currentRarity
+		end
+	end
+
 	if state.LastCollectTime == nil then
 		state.LastCollectTime = os.time()
 	end
 
 	local beforeLevel = normalizeLevel(state.Level)
 	local beforeExp = normalizeExp(state.Exp)
-	local currentExp = beforeExp + 1
+	local addedExp = isNew and 0 or 1
+	local currentExp = beforeExp + addedExp
 	local currentLevel, remainingExp, leveledUp, isMax = applyLevelExp(beforeLevel, currentExp)
 
 	state.Level = currentLevel
 	state.Exp = remainingExp
 	record.Dirty = true
-	if isNew or leveledUp then
+	setFigurineOwnedValue(player, id, true)
+	if isNew or leveledUp or rarityUpgraded then
 		self:RecalculateOutputSpeed(player)
 	end
 	return {
@@ -426,9 +630,10 @@ function DataService:AddFigurine(player, figurineId)
 		MaxLevel = isMax,
 		Level = currentLevel,
 		Exp = remainingExp,
+		Rarity = state.Rarity,
 		PrevLevel = beforeLevel,
 		PrevExp = beforeExp,
-		AddedExp = 1,
+		AddedExp = addedExp,
 	}
 end
 
@@ -444,6 +649,8 @@ function DataService:EnsureFigurineState(player, figurineId)
 		record.Data.Figurines = {}
 	end
 	local id = tonumber(figurineId) or figurineId
+	local info = FigurineConfig.GetById(id)
+	local defaultRarity = normalizeRarity(info and info.Rarity or 1)
 	local state = record.Data.FigurineStates[id]
 	if type(state) ~= "table" then
 		state = { LastCollectTime = os.time() }
@@ -464,12 +671,22 @@ function DataService:EnsureFigurineState(player, figurineId)
 	end
 	local normalizedExp
 	if state.Exp == nil then
-		normalizedExp = record.Data.Figurines[id] and 1 or 0
+		normalizedExp = 0
 	else
 		normalizedExp = normalizeExp(state.Exp)
 	end
 	if state.Exp ~= normalizedExp then
 		state.Exp = normalizedExp
+		record.Dirty = true
+	end
+	local normalizedRarity
+	if state.Rarity == nil then
+		normalizedRarity = defaultRarity
+	else
+		normalizedRarity = normalizeRarity(state.Rarity)
+	end
+	if state.Rarity ~= normalizedRarity then
+		state.Rarity = normalizedRarity
 		record.Dirty = true
 	end
 	return state
@@ -701,6 +918,7 @@ function DataService:ResetPlayerData(player)
 
 	applyCoinsAttribute(player, data.Coins)
 	applyStatsAttributes(player, data)
+	syncFigurineOwnedFolder(player, data.Figurines)
 	self:StartPlaytimeTracker(player)
 	self:SavePlayer(player, true)
 	return data
@@ -765,3 +983,5 @@ function DataService:StartAutoSave()
 end
 
 return DataService
+
+

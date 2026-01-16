@@ -79,6 +79,14 @@ end
 
 local function setStackCount(tool, count)
 	tool:SetAttribute("StackCount", count)
+	local capsuleName = tool:GetAttribute("CapsuleName")
+	if capsuleName then
+		if count and count > 1 then
+			tool.Name = string.format("%s x%d", capsuleName, count)
+		else
+			tool.Name = capsuleName
+		end
+	end
 end
 
 local function ensureStackIndex(player, tool, preferredIndex)
@@ -266,8 +274,9 @@ local function getPrimaryPart(model)
 end
 
 local function getCapsuleInfo(capsuleId)
+	local normalizedId = tonumber(capsuleId) or capsuleId
 	if type(CapsuleConfig.GetById) == "function" then
-		return CapsuleConfig.GetById(capsuleId)
+		return CapsuleConfig.GetById(normalizedId)
 	end
 
 	local list = CapsuleConfig.Capsules
@@ -280,7 +289,7 @@ local function getCapsuleInfo(capsuleId)
 	end
 
 	for _, info in ipairs(list) do
-		if info.Id == capsuleId then
+		if info.Id == normalizedId then
 			return info
 		end
 	end
@@ -331,9 +340,94 @@ local function createOpenPrompt(model, part)
 	return prompt
 end
 
+local function formatCountdownText(seconds)
+	local remaining = math.max(0, math.floor(seconds))
+	if remaining >= 3600 then
+		local hours = math.floor(remaining / 3600)
+		local minutes = math.floor((remaining % 3600) / 60)
+		return string.format("%d:%02d", hours, minutes)
+	end
+	local minutes = math.floor(remaining / 60)
+	local secs = remaining % 60
+	return string.format("%d:%02d", minutes, secs)
+end
+
+local function applyProgressBar(progressBar, progress)
+	if not progressBar or not progressBar:IsA("GuiObject") then
+		return
+	end
+	local size = progressBar.Size
+	progressBar.Size = UDim2.new(progress, size.X.Offset, size.Y.Scale, size.Y.Offset)
+end
+
+local function applyProgressText(textLabel, remainingSeconds, ready)
+	if not textLabel or not textLabel:IsA("TextLabel") then
+		return
+	end
+	if ready then
+		textLabel.Text = "Ready!"
+	else
+		textLabel.Text = formatCountdownText(remainingSeconds)
+	end
+end
+
+local function attachOpenProgress(model, hatchEndTime)
+	if not model or not model.Parent then
+		return
+	end
+	local template = ReplicatedStorage:FindFirstChild("OpenProgresTemplate")
+	if not template then
+		warn("[EggService] OpenProgresTemplate missing in ReplicatedStorage")
+		return
+	end
+
+	local existing = model:FindFirstChild(template.Name)
+	if existing then
+		existing:Destroy()
+	end
+
+	local ui = template:Clone()
+	ui.Parent = model
+
+	local bg = ui:FindFirstChild("Bg", true)
+	local progressBar = bg and bg:FindFirstChild("Progressbar", true) or ui:FindFirstChild("Progressbar", true)
+	local textLabel = bg and bg:FindFirstChild("Text", true) or ui:FindFirstChild("Text", true)
+
+	local endTime = tonumber(hatchEndTime) or os.time()
+	local totalDuration = math.max(0, endTime - os.time())
+
+	local function refresh()
+		if not model or not model.Parent then
+			return false
+		end
+		local remaining = endTime - os.time()
+		if remaining <= 0 then
+			applyProgressBar(progressBar, 1)
+			applyProgressText(textLabel, 0, true)
+			return false
+		end
+		local progress = totalDuration > 0 and math.clamp((totalDuration - remaining) / totalDuration, 0, 1) or 1
+		applyProgressBar(progressBar, progress)
+		applyProgressText(textLabel, remaining, false)
+		return true
+	end
+
+	refresh()
+	task.spawn(function()
+		while model and model.Parent do
+			if not refresh() then
+				break
+			end
+			task.wait(0.2)
+		end
+	end)
+end
+
 local function setupHatchTimer(model, hatchEndTime)
 	local endTime = tonumber(hatchEndTime) or os.time()
 	local remaining = endTime - os.time()
+
+	attachOpenProgress(model, endTime)
 
 	local function markReady()
 		if model and model.Parent then
@@ -469,6 +563,7 @@ local function createCapsuleTool(player, capsuleInfo, count, stackIndex)
 	local tool = Instance.new("Tool")
 	tool.Name = capsuleInfo.Name
 	tool.RequiresHandle = true
+	tool.ManualActivationOnly = true
 	tool:SetAttribute("CapsuleId", capsuleInfo.Id)
 	tool:SetAttribute("CapsuleName", capsuleInfo.Name)
 	tool:SetAttribute("Quality", capsuleInfo.Quality)
@@ -675,14 +770,17 @@ function EggService:PlaceFromTool(player, tool)
 	})
 
 	local newCount = getStackCount(tool) - 1
-	if newCount <= 0 then
+	local shouldEquipNext = newCount <= 0
+	if shouldEquipNext then
 		tool:Destroy()
 	else
 		setStackCount(tool, newCount)
 		tool:SetAttribute("IsPlacing", false)
 	end
 
-	self:EquipNextCapsule(player)
+	if shouldEquipNext then
+		self:EquipNextCapsule(player)
+	end
 end
 
 function EggService:EquipNextCapsule(player)
@@ -946,6 +1044,7 @@ local function bindTool(player, tool)
 	if not tool:GetAttribute("CapsuleId") then
 		return
 	end
+	tool.ManualActivationOnly = true
 
 	toolConnections[tool] = tool.Activated:Connect(function()
 		EggService:PlaceFromTool(player, tool)
@@ -978,6 +1077,9 @@ function EggService:BindPlayer(player)
 		end
 		character.ChildAdded:Connect(function(child)
 			bindTool(player, child)
+		end)
+		task.defer(function()
+			EggService:RestorePlayer(player)
 		end)
 	end)
 

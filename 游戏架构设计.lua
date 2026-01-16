@@ -1,9 +1,9 @@
 ﻿--[[
 游戏架构设计文档
-版本: V2.1
-最后更新: 2026-01-14
+版本: V2.8
+最后更新: 2026-01-16
 ]]
-游戏架构设计 V2.1
+游戏架构设计 V2.8
 
 1. 设计原则
 - 服务端权威：货币、随机、产出、升级、存档都在服务端
@@ -25,6 +25,8 @@ ReplicatedStorage/
 - Config/CapsuleSpawnPoolConfig（盲盒刷新池）
 - Config/FigurineConfig（手办配置，ModelResource支持路径）
 - Config/FigurinePoolConfig（手办卡池配置）
+- Config/FigurineRateConfig（手办产速系数）
+- OpenProgresTemplate（盲盒开启进度UI模板）
 - Modules/FormatHelper（数值格式化）
 - Events/LabubuEvents（具体见 RemoteEvent列表.lua）
 - Capsule（盲盒模型资源）
@@ -45,11 +47,20 @@ ServerScriptService/
 StarterPlayer/StarterPlayerScripts/
 - Client/UIController: 货币、背包、孵化、图鉴UI刷新
 - UI/CoinDisplay: 金币数值显示(MainGui/CoinNum)
+- UI/BackpackDisplay: 自定义背包UI显示与装备交互
+- UI/BagDisplay: 盲盒背包总览界面显示与筛选
+- UI/IndexDisplay: 手办索引界面显示与筛选/检视入口
 - UI/TestInfoDisplay: 统计测试UI显示
 - Client/CameraFocus: 新手办升台镜头聚焦
 - Client/InteractionController: 点击交互、放置操作、开蛋请求
 - Client/HomeController: 本地展示与提示
 - Client/NetClient: 与服务端通信与数据接收
+
+StarterGui/
+- BackpackGui（自定义背包界面）
+- Bag（盲盒背包总览界面）
+- Index（手办索引界面）
+- Check（手办检视界面）
 
 ServerStorage/
 - HomeTemplate（基地模板）
@@ -73,7 +84,7 @@ PlayerData
 - Eggs: { {Uid, EggId} }  -- 背包内的蛋
 - PlacedEggs: { {Uid, EggId, HatchEndTime, Position, Rotation, IsLocal} } -- Position/Rotation为相对IdleFloor的本地坐标
 - Figurines: { [FigurineId] = true }
-- FigurineStates: { [FigurineId] = {LastCollectTime, Level, Exp} }
+- FigurineStates: { [FigurineId] = {LastCollectTime, Level, Exp, Rarity} }
 - Pets: { [PetId] = {Unlocked, Level, Rank, Count, LastCollectTime, PendingCoins} }
 - LastLogoutTime: unix
 
@@ -91,6 +102,7 @@ PlayerData
 运行时实例属性（用于校验与同步）
 - ConveyorEgg: EggId, Price, OwnerUserId, Uid, SpawnTime
 - PetBoard: PetId, OwnerUserId
+- FigurineOwned: Folder<BoolValue> 客户端索引界面读取玩家手办拥有状态
 
 4. 核心系统职责
 - DataService：会话缓存 + Dirty 标记 + 间隔保存 + BindToClose 兜底，UpdateAsync 持久化，离线结算，统计(在线时长/盲盒开启/总产出速度)，手办升级数据管理
@@ -115,7 +127,7 @@ PlayerData
 - 版本不同步：客户端检测版本缺口 -> RequestResync -> 服务端下发全量快照
 
 6. 产币计算与限制（可调）
-- rate = baseRate * (1 + (Level - 1) * QualityCoeff) * RankCoeff
+- rate = baseRate * RarityCoeff * (1 + (Level - 1) * QualityCoeff)
 - OfflineCapSeconds 由配置控制，超出部分不计
 - FigurineCoinCapSeconds 控制单个手办未领取累计上限时长
 - 在线收取：按 now - LastCollectTime 结算，不受离线封顶
@@ -124,6 +136,8 @@ PlayerData
 7. 客户端表现
 - 所有交互仅发送请求，不自行修改核心数据
 - UI使用服务端数据驱动，动画/特效纯客户端
+- Index列表的CheckIcon进入Check检视界面，ViewportFrame展示手办并支持拖拽旋转（+/-30）
+- 禁用系统背包，背包UI基于工具列表渲染，点击条目装备盲盒
 - 币数展示可基于 ServerTime + PendingCoins 推算，仅作表现
 - CoinNum 从玩家属性 Coins 同步显示，格式遵循 FormatHelper 大数值规则
 
