@@ -8,13 +8,14 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local StarterGui = game:GetService("StarterGui")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
 local configFolder = ReplicatedStorage:WaitForChild("Config")
+local modulesFolder = ReplicatedStorage:WaitForChild("Modules")
 local CapsuleConfig = require(configFolder:WaitForChild("CapsuleConfig"))
+local BackpackVisibility = require(modulesFolder:WaitForChild("BackpackVisibility"))
 
 local function getCapsuleInfo(capsuleId)
 	local normalizedId = tonumber(capsuleId) or capsuleId
@@ -165,76 +166,8 @@ end
 local currentBackpack = player:WaitForChild("Backpack")
 local currentCharacter = player.Character
 
-local function setCoreBackpackEnabled(enabled)
-	local ok, err = pcall(function()
-		StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, enabled)
-	end)
-	if not ok then
-		warn(string.format("[BagDisplay] SetCoreGuiEnabled failed: %s", tostring(err)))
-	end
-end
-
-local function getCoreBackpackEnabled()
-	local ok, result = pcall(function()
-		return StarterGui:GetCoreGuiEnabled(Enum.CoreGuiType.Backpack)
-	end)
-	if ok then
-		return result
-	end
-	return nil
-end
-
-local function setBackpackVisibility(isBagOpen)
-	local counter = playerGui:FindFirstChild("BackpackHideCount")
-	if not counter then
-		counter = Instance.new("IntValue")
-		counter.Name = "BackpackHideCount"
-		counter.Value = 0
-		counter.Parent = playerGui
-	end
-
-	local backpackGui = playerGui:FindFirstChild("BackpackGui")
-	if isBagOpen then
-		if backpackGui then
-			backpackGui:SetAttribute("BackpackForceHidden", true)
-		end
-		if counter.Value == 0 then
-			local corePrev = getCoreBackpackEnabled()
-			if type(corePrev) == "boolean" then
-				playerGui:SetAttribute("BackpackHideCorePrev", corePrev)
-			end
-			if backpackGui and backpackGui:IsA("LayerCollector") then
-				playerGui:SetAttribute("BackpackHideGuiPrev", backpackGui.Enabled)
-				backpackGui.Enabled = false
-			end
-			setCoreBackpackEnabled(false)
-		end
-		counter.Value += 1
-	else
-		if counter.Value <= 0 then
-			return
-		end
-		counter.Value -= 1
-		if counter.Value == 0 then
-			local corePrev = playerGui:GetAttribute("BackpackHideCorePrev")
-			if type(corePrev) == "boolean" then
-				setCoreBackpackEnabled(corePrev)
-			end
-			if backpackGui and backpackGui:IsA("LayerCollector") then
-				local guiPrev = playerGui:GetAttribute("BackpackHideGuiPrev")
-				if type(guiPrev) == "boolean" then
-					backpackGui.Enabled = guiPrev
-				else
-					backpackGui.Enabled = true
-				end
-			end
-			if backpackGui then
-				backpackGui:SetAttribute("BackpackForceHidden", false)
-			end
-			playerGui:SetAttribute("BackpackHideCorePrev", nil)
-			playerGui:SetAttribute("BackpackHideGuiPrev", nil)
-		end
-	end
+local function syncBackpackVisibility()
+	BackpackVisibility.SetHidden(playerGui, "Bag", bagBg.Visible == true)
 end
 
 local refresh
@@ -511,16 +444,19 @@ local function bindFilterButtons(container)
 	end
 end
 
+bagBg:GetPropertyChangedSignal("Visible"):Connect(syncBackpackVisibility)
+syncBackpackVisibility()
+
 connectButton(bagButton, function()
 	bagBg.Visible = true
-	setBackpackVisibility(true)
+	syncBackpackVisibility()
 	setFilterQuality(nil)
 	requestRefresh()
 end)
 
 connectButton(closeButton, function()
 	bagBg.Visible = false
-	setBackpackVisibility(false)
+	syncBackpackVisibility()
 end)
 
 if tabScroll then
@@ -531,6 +467,8 @@ else
 	warn("[BagDisplay] TabList not found")
 end
 
+BackpackVisibility.Reconcile(playerGui)
+
 disconnectConnections(backpackConnections)
 disconnectConnections(characterConnections)
 bindContainer(currentBackpack, backpackConnections)
@@ -539,7 +477,7 @@ rebuildToolTracking()
 requestRefresh()
 
 if bagBg.Visible then
-	setBackpackVisibility(true)
+	syncBackpackVisibility()
 end
 
 player.CharacterAdded:Connect(function(character)

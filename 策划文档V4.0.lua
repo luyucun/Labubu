@@ -1160,3 +1160,23 @@ id	手办名字	金币基础产速	品质	稀有度	模型资源	对应展台路
 1.展示动画第一步，需要把StarterGui - GachaResult - Result - Cover的图标改成这个盲盒对应的图标，同时像上述V3.7和V3.8部分的逻辑一样，在StarterGui - GachaResult - Result下也有各个品质的图，需要把品质图显示出来
 2.展示动画第二步（转换信息的时候），需要同步更改Icon/Name/Rare/Speed相关的信息，这些我都设定成了Visible默认False，展示出来时要改成True
 3.同时LevelUp界面也是的，下面也有各个品质的图片，显示出来时，要把对应的品质的名字的图片显示出来
+
+
+策划文档v4.0 音效逻辑
+
+概述：
+1.我们需要在游戏内加入bgm播放，默认bgm资源是：rbxassetid://85493154394720，进入游戏默认播放即可，循环默认播放
+2.玩家触碰领金币按钮时播放音效：rbxassetid://307631257，在普通领取/一次全部领取/一次十倍领取成功时都播放这个音效
+3.新手办解锁台子升起来时，播放rbxassetid://3072176098
+
+另外需要做一个音效播放设置：
+
+1.玩家点击StarterGui - TopRightGui - Bg - Options按钮，打开设置界面（StarterGui - Options - Bg的visible属性改成true）
+2.玩家点击StarterGui - Options - Bg - Title - CloseButton按钮，关闭设置界面
+
+3.共两个设置选项：Music和Sfx，Music控制BGM是否播放，Sfx控制音效是否播放。
+    a.常规状态下，BGM和音效都是默认开启的，也就是播放状态
+    b.玩家的音乐音效设置，要在下次登录的时候，保持这个状态，当然可以只记录在当前设备中即可，不用在服务端记录，如果在服务端记录也可以
+
+4.以音效举例：Options - Bg - Music - CloseButton就是控制开关的按钮，CloseButton下有个叫Text的textlabel，用于显示当前音效播放状态，如果是开启播放，文本就是On，如果是关闭状态，文本就是Off
+5.CloseButton下有个子节点是控制渐变的叫UIGradient，开启的状态下，渐变起始颜色是#55ff00，渐变终止颜色是#ffff00，关闭状态下渐变起始颜色是#cb000e，渐变终止颜色是#ff5d35，所以当玩家点击按钮切换状态时，也要同步修改按钮的状态

@@ -1,20 +1,21 @@
 --[[
 脚本名称: AssetPreload
 脚本类型: LocalScript
-脚本位置: StarterPlayer/StarterPlayerScripts/UI/AssetPreload
-版本: V1.0
+脚本位置: ReplicatedFirst/AssetPreload
+版本: V1.1
 职责: 进入游戏前预加载所有图片资源
 ]]
 
 local ContentProvider = game:GetService("ContentProvider")
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
+local ReplicatedFirst = game:GetService("ReplicatedFirst")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterGui = game:GetService("StarterGui")
 local StarterPack = game:GetService("StarterPack")
 local StarterPlayer = game:GetService("StarterPlayer")
 
-local player = Players.LocalPlayer
+local player = Players.LocalPlayer or Players.PlayerAdded:Wait()
 local playerGui = player:WaitForChild("PlayerGui")
 
 local function createLoadingGui()
@@ -53,6 +54,12 @@ local function createLoadingGui()
 	label.Parent = blocker
 
 	return screenGui
+end
+
+local function setPreloadState(ready)
+	if player and player.Parent then
+		player:SetAttribute("AssetsPreloaded", ready == true)
+	end
 end
 
 local function isAssetId(value)
@@ -100,10 +107,9 @@ local function collectAssetsFromConfigs(assets, seen)
 	end
 end
 
-local function collectAssets()
-	local assets = {}
-	local seen = {}
-
+local function collectAssetsFromInstances(assets, seen)
+	assets = assets or {}
+	seen = seen or {}
 	local function addAsset(value)
 		if not isAssetId(value) then
 			return
@@ -156,12 +162,48 @@ local function collectAssets()
 	scan(workspace)
 	scan(playerGui)
 
-	collectAssetsFromConfigs(assets, seen)
-
 	return assets
 end
 
+local function preloadAssets(assets)
+	local batchSize = 60
+	local total = #assets
+	if total <= 0 then
+		return true
+	end
+	for startIndex = 1, total, batchSize do
+		local batch = {}
+		for index = startIndex, math.min(total, startIndex + batchSize - 1) do
+			table.insert(batch, assets[index])
+		end
+		local ok = pcall(function()
+			ContentProvider:PreloadAsync(batch)
+		end)
+		if not ok then
+			for _, asset in ipairs(batch) do
+				pcall(function()
+					ContentProvider:PreloadAsync({ asset })
+				end)
+			end
+		end
+	end
+	return true
+end
+
+setPreloadState(false)
+if script.Parent ~= ReplicatedFirst then
+	warn("[AssetPreload] Script should be placed under ReplicatedFirst.")
+end
+ReplicatedFirst:RemoveDefaultLoadingScreen()
+
 local loadingGui = createLoadingGui()
+
+local configAssets = {}
+local seen = {}
+collectAssetsFromConfigs(configAssets, seen)
+if #configAssets > 0 then
+	preloadAssets(configAssets)
+end
 
 if not game:IsLoaded() then
 	game.Loaded:Wait()
@@ -169,16 +211,14 @@ end
 
 task.wait()
 
-local assets = collectAssets()
-if #assets > 0 then
-	local ok, err = pcall(function()
-		ContentProvider:PreloadAsync(assets)
-	end)
-	if not ok then
-		warn(string.format("[AssetPreload] Preload failed: %s", tostring(err)))
-	end
+local instanceAssets = {}
+collectAssetsFromInstances(instanceAssets, seen)
+if #instanceAssets > 0 then
+	preloadAssets(instanceAssets)
 end
 
 if loadingGui then
 	loadingGui:Destroy()
 end
+
+setPreloadState(true)

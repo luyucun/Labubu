@@ -18,6 +18,44 @@ local ConveyorService = require(script.Parent:WaitForChild("ConveyorService"))
 local ClaimService = require(script.Parent:WaitForChild("ClaimService"))
 local LeaderboardService = require(script.Parent:WaitForChild("LeaderboardService"))
 
+local function ensureLabubuEvents()
+	local eventsFolder = ReplicatedStorage:FindFirstChild("Events")
+	if not eventsFolder then
+		eventsFolder = Instance.new("Folder")
+		eventsFolder.Name = "Events"
+		eventsFolder.Parent = ReplicatedStorage
+	end
+	local labubuEvents = eventsFolder:FindFirstChild("LabubuEvents")
+	if not labubuEvents then
+		labubuEvents = Instance.new("Folder")
+		labubuEvents.Name = "LabubuEvents"
+		labubuEvents.Parent = eventsFolder
+	end
+	return labubuEvents
+end
+
+local function ensureRemoteEvent(name)
+	local labubuEvents = ensureLabubuEvents()
+	local event = labubuEvents:FindFirstChild(name)
+	if event and not event:IsA("RemoteEvent") then
+		event:Destroy()
+		event = nil
+	end
+	if not event then
+		event = Instance.new("RemoteEvent")
+		event.Name = name
+		event.Parent = labubuEvents
+	end
+	return event
+end
+
+local updateAudioSettingsEvent = ensureRemoteEvent("UpdateAudioSettings")
+if updateAudioSettingsEvent then
+	updateAudioSettingsEvent.OnServerEvent:Connect(function(player, musicEnabled, sfxEnabled)
+		DataService:SetAudioSettings(player, musicEnabled, sfxEnabled)
+	end)
+end
+
 Players.CharacterAutoLoads = false
 
 HomeService:Init()

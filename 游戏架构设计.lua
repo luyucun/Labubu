@@ -1,9 +1,9 @@
 ﻿--[[
 游戏架构设计文档
-版本: V3.0
-最后更新: 2026-01-18
+版本: V4.0
+最后更新: 2026-01-21
 ]]
-游戏架构设计 V2.9
+游戏架构设计 V4.0
 
 1. 设计原则
 - 服务端权威：货币、随机、产出、升级、存档都在服务端
@@ -29,7 +29,9 @@ ReplicatedStorage/
 - Config/QualityConfig（品质图标配置）
 - OpenProgresTemplate（盲盒开启进度UI模板）
 - Modules/FormatHelper（数值格式化）
+- Modules/AudioManager（音频管理）
 - Modules/ButtonPressEffect（按钮按下缩放效果）
+- Modules/BackpackVisibility（背包隐藏计数与显示状态）
 - Events/LabubuEvents（具体见 RemoteEvent列表.lua）
 - Capsule（盲盒模型资源）
 - LBB（手办模型资源）
@@ -59,6 +61,7 @@ StarterPlayer/StarterPlayerScripts/
 - UI/GachaResult: 抽卡结果表现与升级进度动画
 - UI/HomeButton: 主界面Home按钮回基地请求
 - UI/ButtonPressEffect: 全局按钮按下缩放效果绑定
+- UI/OptionsDisplay: 设置界面(BGM/音效开关)与音效播放监听
 - UI/AssetPreload: 进入游戏前预加载所有图片资源
 - Client/CameraFocus: 新手办升台镜头聚焦
 - Client/InteractionController: 点击交互、放置操作、开蛋请求
@@ -92,6 +95,8 @@ PlayerData
 - CapsuleOpenById: { [CapsuleId] = number }
 - OutputSpeed: number
 - AutoCollect: boolean
+- MusicEnabled: boolean
+- SfxEnabled: boolean
 - Eggs: { {Uid, EggId} }  -- 背包内的蛋
 - PlacedEggs: { {Uid, EggId, HatchEndTime, Position, Rotation, IsLocal} } -- Position/Rotation为相对IdleFloor的本地坐标
 - Figurines: { [FigurineId] = true }
@@ -151,7 +156,9 @@ PlayerData
 7. 客户端表现
 - 所有交互仅发送请求，不自行修改核心数据
 - UI使用服务端数据驱动，动画/特效纯客户端
+- Options设置界面控制BGM/音效开关，状态从玩家属性同步，音效由PlaySfx事件触发
 - 开盲盒结果通过OpenEggResult驱动抽卡界面与升级进度动画
+- 抽卡结果播放前等待 AssetsPreloaded，并预加载本次盲盒/手办图标
 - Index列表的CheckIcon进入Check检视界面，ViewportFrame展示手办并支持拖拽旋转（+/-30）
 - 禁用系统背包，背包UI基于工具列表渲染，点击条目装备盲盒
 - 币数展示可基于 ServerTime + PendingCoins 推算，仅作表现

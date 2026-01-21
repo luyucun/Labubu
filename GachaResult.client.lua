@@ -6,6 +6,7 @@
 职责: 开盲盒结果界面与翻面/升级表现
 ]]
 
+local ContentProvider = game:GetService("ContentProvider")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
@@ -22,19 +23,12 @@ local FigurineConfig = require(configFolder:WaitForChild("FigurineConfig"))
 local FigurineRateConfig = require(configFolder:WaitForChild("FigurineRateConfig"))
 local UpgradeConfig = require(configFolder:WaitForChild("UpgradeConfig"))
 local FormatHelper = require(modulesFolder:WaitForChild("FormatHelper"))
+local BackpackVisibility = require(modulesFolder:WaitForChild("BackpackVisibility"))
 
 local gachaGui = playerGui:WaitForChild("GachaResult", 10)
 if not gachaGui then
 	warn("[GachaResult] GachaResult gui not found")
 	return
-end
-
-local function getBackpackGui()
-	local gui = playerGui:FindFirstChild("BackpackGui")
-	if gui and gui:IsA("LayerCollector") then
-		return gui
-	end
-	return nil
 end
 
 local resultFrame = gachaGui:WaitForChild("Result", 10)
@@ -152,6 +146,96 @@ local function setText(textObject, text)
 	if textObject and textObject:IsA("TextLabel") then
 		textObject.Text = text or ""
 	end
+end
+
+local preloadedAssets = {}
+
+local function isAssetId(value)
+	if type(value) ~= "string" or value == "" then
+		return false
+	end
+	if value:find("rbxassetid://") then
+		return true
+	end
+	if value:find("rbxasset://") then
+		return true
+	end
+	if value:find("http://www.roblox.com/asset") or value:find("https://www.roblox.com/asset") then
+		return true
+	end
+	return false
+end
+
+local function addPreloadAsset(targets, value)
+	if not isAssetId(value) then
+		return
+	end
+	if preloadedAssets[value] then
+		return
+	end
+	preloadedAssets[value] = true
+	table.insert(targets, value)
+end
+
+local function collectGuiImages(container, targets)
+	if not container then
+		return
+	end
+	for _, descendant in ipairs(container:GetDescendants()) do
+		if descendant:IsA("ImageLabel") or descendant:IsA("ImageButton") then
+			addPreloadAsset(targets, descendant.Image)
+		end
+	end
+end
+
+local function preloadAssets(assets)
+	if #assets <= 0 then
+		return
+	end
+	local ok = pcall(function()
+		ContentProvider:PreloadAsync(assets)
+	end)
+	if not ok then
+		for _, asset in ipairs(assets) do
+			pcall(function()
+				ContentProvider:PreloadAsync({ asset })
+			end)
+		end
+	end
+end
+
+local function waitForAssetsPreloaded(timeoutSeconds)
+	local timeout = tonumber(timeoutSeconds) or 10
+	local startTime = os.clock()
+	while os.clock() - startTime < timeout do
+		if player:GetAttribute("AssetsPreloaded") == true then
+			return true
+		end
+		task.wait(0.1)
+	end
+	return player:GetAttribute("AssetsPreloaded") == true
+end
+
+local function preloadGachaAssets(capsuleInfo, figurineInfo)
+	if not capsuleInfo or not figurineInfo then
+		return
+	end
+	local targets = {}
+	local figurineIcon = figurineInfo.Icon or ""
+	if resultIcon and (resultIcon:IsA("ImageLabel") or resultIcon:IsA("ImageButton")) then
+		resultIcon.Image = figurineIcon
+		table.insert(targets, resultIcon)
+	end
+	if levelUpIcon and (levelUpIcon:IsA("ImageLabel") or levelUpIcon:IsA("ImageButton")) then
+		levelUpIcon.Image = figurineIcon
+		table.insert(targets, levelUpIcon)
+	end
+	addPreloadAsset(targets, capsuleInfo.Icon or capsuleInfo.DisplayImage)
+	addPreloadAsset(targets, capsuleInfo.DisplayImage)
+	addPreloadAsset(targets, figurineIcon)
+	collectGuiImages(resultFrame, targets)
+	collectGuiImages(levelUpFrame, targets)
+	preloadAssets(targets)
 end
 
 local function captureLayout(frame)
@@ -282,31 +366,9 @@ local coverShakeInterval = 0.05
 
 local activeToken = { Value = 0 }
 local activeTweens = {}
-local backpackRestoreState
 
-local function getBackpackHideCount()
-	local counter = playerGui:FindFirstChild("BackpackHideCount")
-	if counter and counter:IsA("IntValue") then
-		return counter.Value
-	end
-	return 0
-end
-
-local function restoreBackpack()
-	if not backpackRestoreState then
-		return
-	end
-	local backpackGui = getBackpackGui()
-	if backpackGui then
-		if getBackpackHideCount() > 0 then
-			backpackGui.Enabled = false
-			backpackGui:SetAttribute("BackpackForceHidden", true)
-		else
-			backpackGui.Enabled = backpackRestoreState.Enabled == true
-			backpackGui:SetAttribute("BackpackForceHidden", backpackRestoreState.ForceHidden)
-		end
-	end
-	backpackRestoreState = nil
+local function setBackpackHidden(hidden)
+	BackpackVisibility.SetHidden(playerGui, "GachaResult", hidden == true)
 end
 
 local function cancelActive()
@@ -315,7 +377,7 @@ local function cancelActive()
 		tween:Cancel()
 	end
 	table.clear(activeTweens)
-	restoreBackpack()
+	setBackpackHidden(false)
 	if baseLayoutResult then
 		restoreLayout(resultFrame, baseLayoutResult)
 	end
@@ -340,25 +402,27 @@ local function playSequence(payload)
 	local capsuleInfo = CapsuleConfig.GetById(payload.CapsuleId)
 	local figurineInfo = FigurineConfig.GetById(payload.FigurineId)
 	if not capsuleInfo or not figurineInfo then
-		restoreBackpack()
+		setBackpackHidden(false)
 		return
 	end
 	local capsuleQuality = tonumber(capsuleInfo.Quality) or 0
 	local figurineQuality = tonumber(figurineInfo.Quality) or capsuleQuality or 0
 
-	local backpackGui = getBackpackGui()
-	if backpackGui then
-		backpackRestoreState = {
-			Enabled = backpackGui.Enabled,
-			ForceHidden = backpackGui:GetAttribute("BackpackForceHidden"),
-		}
-		backpackGui.Enabled = false
-		backpackGui:SetAttribute("BackpackForceHidden", true)
+	setBackpackHidden(true)
+
+	waitForAssetsPreloaded()
+	if token ~= activeToken.Value then
+		return
+	end
+
+	preloadGachaAssets(capsuleInfo, figurineInfo)
+	if token ~= activeToken.Value then
+		return
 	end
 
 	local layoutResult = captureLayout(resultFrame)
 	if not layoutResult then
-		restoreBackpack()
+		setBackpackHidden(false)
 		return
 	end
 	local layoutLevel = levelUpFrame and captureLayout(levelUpFrame) or nil
@@ -481,7 +545,7 @@ local function playSequence(payload)
 	if levelUpFrame and layoutLevel then
 		restoreLayout(levelUpFrame, layoutLevel)
 	end
-	restoreBackpack()
+	setBackpackHidden(false)
 end
 
 local function ensureLabubuEvents()

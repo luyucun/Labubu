@@ -7,15 +7,16 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local StarterGui = game:GetService("StarterGui")
 local UserInputService = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
 local configFolder = ReplicatedStorage:WaitForChild("Config")
+local modulesFolder = ReplicatedStorage:WaitForChild("Modules")
 local FigurineConfig = require(configFolder:WaitForChild("FigurineConfig"))
 local QualityConfig = require(configFolder:WaitForChild("QualityConfig"))
+local BackpackVisibility = require(modulesFolder:WaitForChild("BackpackVisibility"))
 local modelRoot = ReplicatedStorage:WaitForChild("LBB")
 
 local mainGui = playerGui:WaitForChild("MainGui", 10)
@@ -199,76 +200,12 @@ local function updateQualityIndicators(container, quality)
 	end
 end
 
-local function setCoreBackpackEnabled(enabled)
-	local ok, err = pcall(function()
-		StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, enabled)
-	end)
-	if not ok then
-		warn(string.format("[IndexDisplay] SetCoreGuiEnabled failed: %s", tostring(err)))
-	end
+local function setIndexBackpackHidden(hidden)
+	BackpackVisibility.SetHidden(playerGui, "Index", hidden == true)
 end
 
-local function getCoreBackpackEnabled()
-	local ok, result = pcall(function()
-		return StarterGui:GetCoreGuiEnabled(Enum.CoreGuiType.Backpack)
-	end)
-	if ok then
-		return result
-	end
-	return nil
-end
-
-local function setBackpackVisibility(isIndexOpen)
-	local counter = playerGui:FindFirstChild("BackpackHideCount")
-	if not counter then
-		counter = Instance.new("IntValue")
-		counter.Name = "BackpackHideCount"
-		counter.Value = 0
-		counter.Parent = playerGui
-	end
-
-	local backpackGui = playerGui:FindFirstChild("BackpackGui")
-	if isIndexOpen then
-		if backpackGui then
-			backpackGui:SetAttribute("BackpackForceHidden", true)
-		end
-		if counter.Value == 0 then
-			local corePrev = getCoreBackpackEnabled()
-			if type(corePrev) == "boolean" then
-				playerGui:SetAttribute("BackpackHideCorePrev", corePrev)
-			end
-			if backpackGui and backpackGui:IsA("LayerCollector") then
-				playerGui:SetAttribute("BackpackHideGuiPrev", backpackGui.Enabled)
-				backpackGui.Enabled = false
-			end
-			setCoreBackpackEnabled(false)
-		end
-		counter.Value += 1
-	else
-		if counter.Value <= 0 then
-			return
-		end
-		counter.Value -= 1
-		if counter.Value == 0 then
-			local corePrev = playerGui:GetAttribute("BackpackHideCorePrev")
-			if type(corePrev) == "boolean" then
-				setCoreBackpackEnabled(corePrev)
-			end
-			if backpackGui and backpackGui:IsA("LayerCollector") then
-				local guiPrev = playerGui:GetAttribute("BackpackHideGuiPrev")
-				if type(guiPrev) == "boolean" then
-					backpackGui.Enabled = guiPrev
-				else
-					backpackGui.Enabled = true
-				end
-			end
-			if backpackGui then
-				backpackGui:SetAttribute("BackpackForceHidden", false)
-			end
-			playerGui:SetAttribute("BackpackHideCorePrev", nil)
-			playerGui:SetAttribute("BackpackHideGuiPrev", nil)
-		end
-	end
+local function setCheckBackpackHidden(hidden)
+	BackpackVisibility.SetHidden(playerGui, "IndexCheck", hidden == true)
 end
 
 local function resolveModelResource(root, resource)
@@ -727,7 +664,7 @@ openIndex = function(restoreScroll, forceBackpack)
 	local shouldSetBackpack = forceBackpack or not indexBg.Visible
 	indexBg.Visible = true
 	if shouldSetBackpack then
-		setBackpackVisibility(true)
+		setIndexBackpackHidden(true)
 	end
 	if not currentQuality then
 		currentQuality = 1
@@ -743,7 +680,7 @@ end
 closeIndex = function()
 	if indexBg.Visible then
 		indexBg.Visible = false
-		setBackpackVisibility(false)
+		setIndexBackpackHidden(false)
 	end
 end
 
@@ -774,15 +711,14 @@ openCheck = function(figurineId)
 
 	if bagBg and bagBg.Visible then
 		bagBg.Visible = false
-		setBackpackVisibility(false)
 	end
 	if indexBg.Visible then
 		indexBg.Visible = false
-		setBackpackVisibility(false)
+		setIndexBackpackHidden(false)
 	end
 
 	checkBg.Visible = true
-	setBackpackVisibility(true)
+	setCheckBackpackHidden(true)
 	checkOpen = true
 	dragActive = false
 	dragInput = nil
@@ -803,7 +739,7 @@ closeCheck = function()
 	hoverActive = false
 	hoverLastPos = nil
 	clearViewport()
-	setBackpackVisibility(false)
+	setCheckBackpackHidden(false)
 	openIndex(true)
 end
 
@@ -935,6 +871,13 @@ elseif tabList then
 else
 	warn("[IndexDisplay] TabList not found")
 end
+
+setIndexBackpackHidden(indexBg.Visible)
+if checkBg then
+	setCheckBackpackHidden(checkBg.Visible)
+end
+
+BackpackVisibility.Reconcile(playerGui)
 
 if indexBg.Visible then
 	openIndex(false, true)

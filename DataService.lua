@@ -35,6 +35,8 @@ local function defaultData()
 		CapsuleOpenById = {},
 		OutputSpeed = 0,
 		AutoCollect = false,
+		MusicEnabled = true,
+		SfxEnabled = true,
 	}
 end
 
@@ -329,6 +331,8 @@ local function applyStatsAttributes(player, data)
 	player:SetAttribute("CapsuleOpenTotal", normalizeCount(data.CapsuleOpenTotal))
 	player:SetAttribute("OutputSpeed", normalizeOutputSpeed(data.OutputSpeed))
 	player:SetAttribute("AutoCollect", data.AutoCollect == true)
+	player:SetAttribute("MusicEnabled", data.MusicEnabled == true)
+	player:SetAttribute("SfxEnabled", data.SfxEnabled == true)
 end
 
 local function ensureFigurineOwnedFolder(player)
@@ -460,6 +464,20 @@ function DataService:LoadPlayer(player)
 		data.AutoCollect = data.AutoCollect == true
 	end
 
+	if data.MusicEnabled == nil then
+		data.MusicEnabled = true
+		needsSave = true
+	else
+		data.MusicEnabled = data.MusicEnabled == true
+	end
+
+	if data.SfxEnabled == nil then
+		data.SfxEnabled = true
+		needsSave = true
+	else
+		data.SfxEnabled = data.SfxEnabled == true
+	end
+
 
 	local normalizedPlaytime = normalizeCount(data.TotalPlayTime)
 	if data.TotalPlayTime ~= normalizedPlaytime then
@@ -567,6 +585,34 @@ function DataService:SetAutoCollect(player, enabled)
 	record.Dirty = true
 	if player and player.Parent then
 		player:SetAttribute("AutoCollect", record.Data.AutoCollect)
+	end
+end
+
+function DataService:SetAudioSettings(player, musicEnabled, sfxEnabled)
+	local record = sessionData[player.UserId]
+	if not record then
+		return
+	end
+	local dirty = false
+	if musicEnabled ~= nil then
+		record.Data.MusicEnabled = musicEnabled == true
+		dirty = true
+	end
+	if sfxEnabled ~= nil then
+		record.Data.SfxEnabled = sfxEnabled == true
+		dirty = true
+	end
+	if not dirty then
+		return
+	end
+	record.Dirty = true
+	if player and player.Parent then
+		if musicEnabled ~= nil then
+			player:SetAttribute("MusicEnabled", record.Data.MusicEnabled)
+		end
+		if sfxEnabled ~= nil then
+			player:SetAttribute("SfxEnabled", record.Data.SfxEnabled)
+		end
 	end
 end
 

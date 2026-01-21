@@ -8,12 +8,13 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local StarterGui = game:GetService("StarterGui")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
 local GameConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("GameConfig"))
 local FigurineConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("FigurineConfig"))
+local modulesFolder = ReplicatedStorage:WaitForChild("Modules")
+local BackpackVisibility = require(modulesFolder:WaitForChild("BackpackVisibility"))
 
 -- 镜头从玩家移动到目标台子的时间（秒）
 local FOCUS_MOVE_TIME = 0.5
@@ -132,76 +133,8 @@ local function setExitVisible(visible)
 	end
 end
 
-local function setCoreBackpackEnabled(enabled)
-	local ok, err = pcall(function()
-		StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, enabled)
-	end)
-	if not ok then
-		warn(string.format("[CameraFocus] SetCoreGuiEnabled failed: %s", tostring(err)))
-	end
-end
-
-local function getCoreBackpackEnabled()
-	local ok, result = pcall(function()
-		return StarterGui:GetCoreGuiEnabled(Enum.CoreGuiType.Backpack)
-	end)
-	if ok then
-		return result
-	end
-	return nil
-end
-
 local function setBackpackVisibility(hidden)
-	local counter = playerGui:FindFirstChild("BackpackHideCount")
-	if not counter then
-		counter = Instance.new("IntValue")
-		counter.Name = "BackpackHideCount"
-		counter.Value = 0
-		counter.Parent = playerGui
-	end
-
-	local backpackGui = playerGui:FindFirstChild("BackpackGui")
-	if hidden then
-		if backpackGui then
-			backpackGui:SetAttribute("BackpackForceHidden", true)
-		end
-		if counter.Value == 0 then
-			local corePrev = getCoreBackpackEnabled()
-			if type(corePrev) == "boolean" then
-				playerGui:SetAttribute("BackpackHideCorePrev", corePrev)
-			end
-			if backpackGui and backpackGui:IsA("LayerCollector") then
-				playerGui:SetAttribute("BackpackHideGuiPrev", backpackGui.Enabled)
-				backpackGui.Enabled = false
-			end
-			setCoreBackpackEnabled(false)
-		end
-		counter.Value += 1
-	else
-		if counter.Value <= 0 then
-			return
-		end
-		counter.Value -= 1
-		if counter.Value == 0 then
-			local corePrev = playerGui:GetAttribute("BackpackHideCorePrev")
-			if type(corePrev) == "boolean" then
-				setCoreBackpackEnabled(corePrev)
-			end
-			if backpackGui and backpackGui:IsA("LayerCollector") then
-				local guiPrev = playerGui:GetAttribute("BackpackHideGuiPrev")
-				if type(guiPrev) == "boolean" then
-					backpackGui.Enabled = guiPrev
-				else
-					backpackGui.Enabled = true
-				end
-			end
-			if backpackGui then
-				backpackGui:SetAttribute("BackpackForceHidden", false)
-			end
-			playerGui:SetAttribute("BackpackHideCorePrev", nil)
-			playerGui:SetAttribute("BackpackHideGuiPrev", nil)
-		end
-	end
+	BackpackVisibility.SetHidden(playerGui, "CameraFocus", hidden == true)
 end
 
 local function restoreCamera(applyCFrame)

@@ -1,9 +1,9 @@
 --[[
-鑴氭湰鍚嶇О: FigurineService
-鑴氭湰绫诲瀷: ModuleScript
-鑴氭湰浣嶇疆: ServerScriptService/Server/FigurineService
-鐗堟湰: V2.0
-鑱岃矗: 鎵嬪姙鎶藉彇/鎽嗘斁/寰呴鍙栦骇甯?淇℃伅灞曠ず/鍗囩骇琛ㄧ幇
+脚本名称: FigurineService
+脚本类型: ModuleScript
+脚本位置: ServerScriptService/Server/FigurineService
+版本: V2.0
+职责: 手办抽取/摆放/待领取产币信息展示/升级表现
 ]]
 
 local Players = game:GetService("Players")
@@ -39,6 +39,46 @@ local PLATFORM_EFFECT_TEMPLATE_NAME = "EffectPlatformUp"
 local PLATFORM_MIN_Y = 1
 local PLATFORM_MAX_Y = 5
 local UI_UPDATE_INTERVAL = 1
+
+local function ensureLabubuEvents()
+	local eventsFolder = ReplicatedStorage:FindFirstChild("Events")
+	if not eventsFolder then
+		eventsFolder = Instance.new("Folder")
+		eventsFolder.Name = "Events"
+		eventsFolder.Parent = ReplicatedStorage
+	end
+	local labubuEvents = eventsFolder:FindFirstChild("LabubuEvents")
+	if not labubuEvents then
+		labubuEvents = Instance.new("Folder")
+		labubuEvents.Name = "LabubuEvents"
+		labubuEvents.Parent = eventsFolder
+	end
+	return labubuEvents
+end
+
+local function ensurePlaySfxEvent()
+	local labubuEvents = ensureLabubuEvents()
+	local event = labubuEvents:FindFirstChild("PlaySfx")
+	if event and not event:IsA("RemoteEvent") then
+		event:Destroy()
+		event = nil
+	end
+	if not event then
+		event = Instance.new("RemoteEvent")
+		event.Name = "PlaySfx"
+		event.Parent = labubuEvents
+	end
+	return event
+end
+
+local playSfxEvent = ensurePlaySfxEvent()
+
+local function fireSfx(player, kind)
+	if not playSfxEvent or not player or not player.Parent then
+		return
+	end
+	playSfxEvent:FireClient(player, kind)
+end
 
 local function formatHomeName(index)
 	return string.format("%s%02d", GameConfig.HomeSlotPrefix, index)
@@ -915,6 +955,7 @@ function FigurineService:CollectCoins(player, figurineId)
 	end
 	DataService:AddCoins(player, pending)
 	DataService:SetFigurineLastCollectTime(player, figurineId, os.time())
+	fireSfx(player, "Collect")
 	return pending
 end
 
@@ -1060,6 +1101,7 @@ function FigurineService:GrantFromCapsule(player, capsuleInfo, presentDelaySecon
 				return
 			end
 			placeFigurineModel(player, figurineInfo)
+			fireSfx(player, "Unlock")
 			setupShowcasePlatform(player, figurineInfo, true)
 			bindClaimButton(player, figurineInfo)
 			triggerCameraFocus(player, figurineId)

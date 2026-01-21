@@ -14,7 +14,9 @@ local UserInputService = game:GetService("UserInputService")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 local configFolder = ReplicatedStorage:WaitForChild("Config")
+local modulesFolder = ReplicatedStorage:WaitForChild("Modules")
 local CapsuleConfig = require(configFolder:WaitForChild("CapsuleConfig"))
+local BackpackVisibility = require(modulesFolder:WaitForChild("BackpackVisibility"))
 
 local function disableCoreBackpack()
 	local ok, err = pcall(function()
@@ -32,6 +34,8 @@ if not backpackGui then
 	warn("[BackpackDisplay] BackpackGui not found")
 	return
 end
+
+BackpackVisibility.Reconcile(playerGui)
 
 local backpackFrame = backpackGui:WaitForChild("BackpackFrame", 10)
 if not backpackFrame then

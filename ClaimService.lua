@@ -31,6 +31,46 @@ local CLAIM_EFFECT_DEFAULT_COUNT = 25
 local CLAIM_EFFECT_FOLDER_NAME = "Effect"
 local CLAIM_EFFECT_TEMPLATE_NAME = "EffectTouchMoney"
 
+local function ensureLabubuEvents()
+	local eventsFolder = ReplicatedStorage:FindFirstChild("Events")
+	if not eventsFolder then
+		eventsFolder = Instance.new("Folder")
+		eventsFolder.Name = "Events"
+		eventsFolder.Parent = ReplicatedStorage
+	end
+	local labubuEvents = eventsFolder:FindFirstChild("LabubuEvents")
+	if not labubuEvents then
+		labubuEvents = Instance.new("Folder")
+		labubuEvents.Name = "LabubuEvents"
+		labubuEvents.Parent = eventsFolder
+	end
+	return labubuEvents
+end
+
+local function ensurePlaySfxEvent()
+	local labubuEvents = ensureLabubuEvents()
+	local event = labubuEvents:FindFirstChild("PlaySfx")
+	if event and not event:IsA("RemoteEvent") then
+		event:Destroy()
+		event = nil
+	end
+	if not event then
+		event = Instance.new("RemoteEvent")
+		event.Name = "PlaySfx"
+		event.Parent = labubuEvents
+	end
+	return event
+end
+
+local playSfxEvent = ensurePlaySfxEvent()
+
+local function fireCollectSfx(player)
+	if not playSfxEvent or not player or not player.Parent then
+		return
+	end
+	playSfxEvent:FireClient(player, "Collect")
+end
+
 local function formatHomeName(index)
 	return string.format("%s%02d", GameConfig.HomeSlotPrefix, index)
 end
@@ -486,12 +526,18 @@ function ClaimService:Init()
 		end
 
 		if receiptInfo.ProductId == GameConfig.ClaimAllProductId then
-			FigurineService:CollectAllCoins(player, 1)
+			local grant = FigurineService:CollectAllCoins(player, 1)
+			if grant > 0 then
+				fireCollectSfx(player)
+			end
 			return Enum.ProductPurchaseDecision.PurchaseGranted
 		end
 
 		if receiptInfo.ProductId == GameConfig.ClaimAllTenProductId then
-			FigurineService:CollectAllCoins(player, 10)
+			local grant = FigurineService:CollectAllCoins(player, 10)
+			if grant > 0 then
+				fireCollectSfx(player)
+			end
 			return Enum.ProductPurchaseDecision.PurchaseGranted
 		end
 

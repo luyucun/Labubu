@@ -20,6 +20,8 @@ ReplicatedStorage
         ├── PetCoinsCollected（RemoteEvent）
         ├── DataDelta（RemoteEvent）
         ├── GoHome（RemoteEvent）
+        ├── UpdateAudioSettings（RemoteEvent）
+        ├── PlaySfx（RemoteEvent）
         └── ErrorHint（RemoteEvent）
 
 事件清单
@@ -81,6 +83,15 @@ ReplicatedStorage
 13. ErrorHint (S->C)
 - 参数: Code, Message
 - 说明: 统一错误提示
+
+14. UpdateAudioSettings (C->S)
+- 参数: MusicEnabled, SfxEnabled
+- 说明: 客户端设置BGM/音效开关，服务端记录并同步属性
+- 校验: 仅限玩家自身、频率限制(可选)
+
+15. PlaySfx (S->C)
+- 参数: Kind
+- 说明: 服务端通知客户端播放音效（Collect/Unlock）
 
 备注
 - 所有随机与核心计算只在服务端
