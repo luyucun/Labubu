@@ -1,4 +1,4 @@
-﻿--[[
+--[[
 脚本名称: EggService
 脚本类型: ModuleScript
 脚本位置: ServerScriptService/Server/EggService
@@ -12,6 +12,7 @@ local Workspace = game:GetService("Workspace")
 
 local GameConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("GameConfig"))
 local CapsuleConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("CapsuleConfig"))
+local UpgradeConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("UpgradeConfig"))
 
 local FormatHelper = require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("FormatHelper"))
 
@@ -24,6 +25,93 @@ EggService.__index = EggService
 local toolConnections = {} -- [tool] = connection
 local playerConnections = {} -- [player] = {Backpack, Character}
 local playerStackIndex = {} -- [userId] = number
+
+local function ensureLabubuEvents()
+	local eventsFolder = ReplicatedStorage:FindFirstChild("Events")
+	if not eventsFolder then
+		eventsFolder = Instance.new("Folder")
+		eventsFolder.Name = "Events"
+		eventsFolder.Parent = ReplicatedStorage
+	end
+	local labubuEvents = eventsFolder:FindFirstChild("LabubuEvents")
+	if not labubuEvents then
+		labubuEvents = Instance.new("Folder")
+		labubuEvents.Name = "LabubuEvents"
+		labubuEvents.Parent = eventsFolder
+	end
+	return labubuEvents
+end
+
+local function ensureErrorHintEvent()
+	local labubuEvents = ensureLabubuEvents()
+	local event = labubuEvents:FindFirstChild("ErrorHint")
+	if event and not event:IsA("RemoteEvent") then
+		event:Destroy()
+		event = nil
+	end
+	if not event then
+		event = Instance.new("RemoteEvent")
+		event.Name = "ErrorHint"
+		event.Parent = labubuEvents
+	end
+	return event
+end
+
+local errorHintEvent = ensureErrorHintEvent()
+
+local function ensureOpenEggResultEvent()
+	local labubuEvents = ensureLabubuEvents()
+	local event = labubuEvents:FindFirstChild("OpenEggResult")
+	if event and not event:IsA("RemoteEvent") then
+		event:Destroy()
+		event = nil
+	end
+	if not event then
+		event = Instance.new("RemoteEvent")
+		event.Name = "OpenEggResult"
+		event.Parent = labubuEvents
+	end
+	return event
+end
+
+local openEggResultEvent = ensureOpenEggResultEvent()
+
+local function ensurePlaceEggEvent()
+	local labubuEvents = ensureLabubuEvents()
+	local event = labubuEvents:FindFirstChild("PlaceEgg")
+	if event and not event:IsA("RemoteEvent") then
+		event:Destroy()
+		event = nil
+	end
+	if not event then
+		event = Instance.new("RemoteEvent")
+		event.Name = "PlaceEgg"
+		event.Parent = labubuEvents
+	end
+	return event
+end
+
+local placeEggEvent = ensurePlaceEggEvent()
+
+local function sendErrorHint(player, code, message)
+	if not player or not player.Parent or not errorHintEvent then
+		return
+	end
+	errorHintEvent:FireClient(player, code, message)
+end
+
+local function getPlacedEggCount(placedFolder, player)
+	if not placedFolder or not player then
+		return 0
+	end
+	local count = 0
+	for _, child in ipairs(placedFolder:GetChildren()) do
+		if child:GetAttribute("Placed") and child:GetAttribute("OwnerUserId") == player.UserId then
+			count += 1
+		end
+	end
+	return count
+end
 
 local function toVectorTable(vec)
 	return { X = vec.X, Y = vec.Y, Z = vec.Z }
@@ -122,6 +210,42 @@ local function getCapsuleToolsById(player, capsuleId)
 		end
 	end
 	return tools
+end
+
+local function resolveCapsuleId(player, eggUidOrCapsuleId)
+	local capsuleId = tonumber(eggUidOrCapsuleId)
+	if capsuleId then
+		return capsuleId
+	end
+	if type(eggUidOrCapsuleId) ~= "string" or eggUidOrCapsuleId == "" then
+		return nil
+	end
+	local eggs = DataService:GetEggs(player)
+	if type(eggs) ~= "table" then
+		return nil
+	end
+	for _, entry in ipairs(eggs) do
+		if entry.Uid == eggUidOrCapsuleId then
+			return entry.EggId
+		end
+	end
+	return nil
+end
+
+local function getCapsuleToolForId(player, capsuleId)
+	local tools = getCapsuleToolsById(player, capsuleId)
+	if #tools == 0 then
+		return nil
+	end
+	local character = player.Character
+	if character then
+		for _, tool in ipairs(tools) do
+			if tool.Parent == character then
+				return tool
+			end
+		end
+	end
+	return tools[1]
 end
 
 local function toLocalData(baseCFrame, worldCFrame)
@@ -548,7 +672,27 @@ function EggService:HandleOpen(player, model)
 	if eggUid then
 		DataService:RemovePlacedEgg(player, eggUid)
 	end
-	FigurineService:GrantFromCapsule(player, capsuleInfo)
+	local gachaDelay = (tonumber(GameConfig.GachaSlideInTime) or 0)
+		+ (tonumber(GameConfig.GachaCoverHoldTime) or 0)
+		+ (tonumber(GameConfig.GachaFlipTime) or 0)
+		+ (tonumber(GameConfig.GachaResultHoldTime) or 0)
+		+ (tonumber(GameConfig.GachaSlideOutTime) or 0)
+		+ (tonumber(GameConfig.CameraFocusDelay) or 0)
+	local figurineInfo, result = FigurineService:GrantFromCapsule(player, capsuleInfo, gachaDelay)
+	if openEggResultEvent and figurineInfo and result then
+		openEggResultEvent:FireClient(
+			player,
+			capsuleInfo.Id,
+			figurineInfo.Id,
+			result.IsNew == true,
+			result.Rarity,
+			result.PrevLevel,
+			result.PrevExp,
+			result.Level,
+			result.Exp,
+			UpgradeConfig.GetMaxLevel()
+		)
+	end
 	model:Destroy()
 end
 
@@ -563,7 +707,7 @@ local function createCapsuleTool(player, capsuleInfo, count, stackIndex)
 	local tool = Instance.new("Tool")
 	tool.Name = capsuleInfo.Name
 	tool.RequiresHandle = true
-	tool.ManualActivationOnly = true
+	tool.ManualActivationOnly = false
 	tool:SetAttribute("CapsuleId", capsuleInfo.Id)
 	tool:SetAttribute("CapsuleName", capsuleInfo.Name)
 	tool:SetAttribute("Quality", capsuleInfo.Quality)
@@ -634,7 +778,7 @@ function EggService:GiveCapsuleTool(player, capsuleInfo)
 	return tool
 end
 
-function EggService:PlaceFromTool(player, tool)
+function EggService:PlaceFromTool(player, tool, targetWorldPosition)
 	if not player or not player.Parent then
 		return
 	end
@@ -672,6 +816,12 @@ function EggService:PlaceFromTool(player, tool)
 
 	local idleFloor = getIdleFloor(homeFolder)
 	if not idleFloor then
+		return
+	end
+
+	local maxPlaced = tonumber(GameConfig.MaxPlacedCapsules) or 12
+	if maxPlaced > 0 and getPlacedEggCount(placedFolder, player) >= maxPlaced then
+		sendErrorHint(player, "PlacementLimit", "Placement limit reached")
 		return
 	end
 
@@ -714,8 +864,13 @@ function EggService:PlaceFromTool(player, tool)
 		return
 	end
 
-	local forward = root.CFrame.LookVector
-	local basePos = root.Position + forward * 5
+	local basePos
+	if typeof(targetWorldPosition) == "Vector3" then
+		basePos = targetWorldPosition
+	else
+		local forward = root.CFrame.LookVector
+		basePos = root.Position + forward * 5
+	end
 	local floorRayParams = RaycastParams.new()
 	floorRayParams.FilterType = Enum.RaycastFilterType.Include
 	floorRayParams.FilterDescendantsInstances = { idleFloor }
@@ -735,8 +890,8 @@ function EggService:PlaceFromTool(player, tool)
 	local size = model:GetExtentsSize()
 	local blockCheckCFrame = CFrame.new(floorPos + Vector3.new(0, size.Y / 2, 0))
 	local overlapParams = OverlapParams.new()
-	overlapParams.FilterType = Enum.RaycastFilterType.Exclude
-	overlapParams.FilterDescendantsInstances = { idleFloor, character }
+	overlapParams.FilterType = Enum.RaycastFilterType.Include
+	overlapParams.FilterDescendantsInstances = { placedFolder }
 
 	local blocking = Workspace:GetPartBoundsInBox(blockCheckCFrame, size, overlapParams)
 	if #blocking > 0 then
@@ -1044,7 +1199,11 @@ local function bindTool(player, tool)
 	if not tool:GetAttribute("CapsuleId") then
 		return
 	end
-	tool.ManualActivationOnly = true
+	tool.ManualActivationOnly = false
+
+	if placeEggEvent then
+		return
+	end
 
 	toolConnections[tool] = tool.Activated:Connect(function()
 		EggService:PlaceFromTool(player, tool)
@@ -1055,6 +1214,26 @@ local function bindTool(player, tool)
 			toolConnections[tool]:Disconnect()
 			toolConnections[tool] = nil
 		end
+	end)
+end
+
+if placeEggEvent then
+	placeEggEvent.OnServerEvent:Connect(function(player, eggUidOrCapsuleId, worldPosition)
+		if not player or not player.Parent then
+			return
+		end
+		if typeof(worldPosition) ~= "Vector3" then
+			return
+		end
+		local capsuleId = resolveCapsuleId(player, eggUidOrCapsuleId)
+		if not capsuleId then
+			return
+		end
+		local tool = getCapsuleToolForId(player, capsuleId)
+		if not tool then
+			return
+		end
+		EggService:PlaceFromTool(player, tool, worldPosition)
 	end)
 end
 

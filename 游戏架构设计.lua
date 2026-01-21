@@ -1,9 +1,9 @@
 ﻿--[[
 游戏架构设计文档
-版本: V2.8
-最后更新: 2026-01-16
+版本: V3.0
+最后更新: 2026-01-18
 ]]
-游戏架构设计 V2.8
+游戏架构设计 V2.9
 
 1. 设计原则
 - 服务端权威：货币、随机、产出、升级、存档都在服务端
@@ -26,8 +26,10 @@ ReplicatedStorage/
 - Config/FigurineConfig（手办配置，ModelResource支持路径）
 - Config/FigurinePoolConfig（手办卡池配置）
 - Config/FigurineRateConfig（手办产速系数）
+- Config/QualityConfig（品质图标配置）
 - OpenProgresTemplate（盲盒开启进度UI模板）
 - Modules/FormatHelper（数值格式化）
+- Modules/ButtonPressEffect（按钮按下缩放效果）
 - Events/LabubuEvents（具体见 RemoteEvent列表.lua）
 - Capsule（盲盒模型资源）
 - LBB（手办模型资源）
@@ -41,6 +43,8 @@ ServerScriptService/
 - Server/ConveyorService: 按刷新池权重产蛋与生命周期管理
 - Server/EggService: 盲盒购买/背包/放置/倒计时
 - Server/FigurineService: 盲盒开盒随机手办/展台摆放/待领取产币与领取触发
+- Server/ClaimService: 领取全部/十倍领取/自动领取付费功能
+- Server/LeaderboardService: 服务器内排行榜（总产速/总游戏时间）
 - Server/PetService: 图鉴状态、产币、升级与品阶更新
 - Server/NetService: 统一RemoteEvent校验与分发
 
@@ -51,6 +55,11 @@ StarterPlayer/StarterPlayerScripts/
 - UI/BagDisplay: 盲盒背包总览界面显示与筛选
 - UI/IndexDisplay: 手办索引界面显示与筛选/检视入口
 - UI/TestInfoDisplay: 统计测试UI显示
+- UI/ErrorHint: 统一错误提示显示
+- UI/GachaResult: 抽卡结果表现与升级进度动画
+- UI/HomeButton: 主界面Home按钮回基地请求
+- UI/ButtonPressEffect: 全局按钮按下缩放效果绑定
+- UI/AssetPreload: 进入游戏前预加载所有图片资源
 - Client/CameraFocus: 新手办升台镜头聚焦
 - Client/InteractionController: 点击交互、放置操作、开蛋请求
 - Client/HomeController: 本地展示与提示
@@ -61,6 +70,7 @@ StarterGui/
 - Bag（盲盒背包总览界面）
 - Index（手办索引界面）
 - Check（手办检视界面）
+- GachaResult（抽卡结果界面）
 
 ServerStorage/
 - HomeTemplate（基地模板）
@@ -81,6 +91,7 @@ PlayerData
 - CapsuleOpenTotal: number
 - CapsuleOpenById: { [CapsuleId] = number }
 - OutputSpeed: number
+- AutoCollect: boolean
 - Eggs: { {Uid, EggId} }  -- 背包内的蛋
 - PlacedEggs: { {Uid, EggId, HatchEndTime, Position, Rotation, IsLocal} } -- Position/Rotation为相对IdleFloor的本地坐标
 - Figurines: { [FigurineId] = true }
@@ -111,6 +122,7 @@ PlayerData
 - ConveyorService：按配置间隔产蛋，服务端生成 EggUid，维护索引/最大蛋数/过期清理
 - EggService：盲盒购买校验、背包管理、放置、倒计时与开盒触发
 - FigurineService：开盒随机手办、展台放置、金币待领取/触碰领取、展台信息UI，升级展示
+- ClaimService：领取全部/十倍领取/自动领取通行证、UI状态切换与自动结算
 - PetService：图鉴解锁、PendingCoins 累积、产币结算、升级条件与品阶更新
 - NetService：所有RemoteEvent统一入口，频率限制/归属/距离/状态/版本校验与重同步
 
@@ -119,9 +131,12 @@ PlayerData
 - V1.3 流程：传送带按刷新池权重生成盲盒 -> 玩家交互购买 -> 盲盒进背包 -> 放置地面 -> 倒计时结束
 - 传送带产蛋：每个Home独立计时 -> 按刷新池权重生成蛋模型 -> 建立 EggUid 索引 -> 移动至末端 -> 自动销毁/过期清理
 - 购买蛋：客户端点击 -> 服务端校验(归属/距离/金币/冷却) -> 扣费 -> 入背包 -> 移除蛋
-- 放置蛋：客户端请求 -> 校验位置(在自家地板内/格位) -> 占用检测 -> 生成模型 -> 设置HatchEndTime
-- 开蛋：校验孵化完成 -> 按卡池权重随机手办 -> 摆放展台 -> 开始产币
+- 放置蛋：客户端请求 -> 校验位置(在自家地板内/格位) -> 数量上限(MaxPlacedCapsules) -> 占用检测 -> 生成模型 -> 设置HatchEndTime
+- 开蛋：校验孵化完成 -> 按卡池权重随机手办 -> 下发OpenEggResult -> 客户端抽卡表现 -> 新卡延迟升台与镜头聚焦 -> 开始产币
+- Home按钮：客户端请求GoHome -> 服务端校验归属 -> 传送回基地出生点
 - 产币与收取：服务端按 LastCollectTime 结算，触碰领取按钮收取并清零累计
+- 领取全部/十倍领取：触碰触发开发者道具购买 -> 统一结算未领取金币 -> 更新各手办 LastCollectTime
+- 自动领取通行证：购买后 AutoCollect=true，隐藏ClaimAll/ClaimAllTen，按间隔自动结算
 - 升级：获得同ID手办累积经验达到 UpgradeConfig 阈值自动升级，达到最高级停止
 - 离线收益：依据离线时长与上限秒数结算，登录时写入 PendingCoins
 - 版本不同步：客户端检测版本缺口 -> RequestResync -> 服务端下发全量快照
@@ -136,6 +151,7 @@ PlayerData
 7. 客户端表现
 - 所有交互仅发送请求，不自行修改核心数据
 - UI使用服务端数据驱动，动画/特效纯客户端
+- 开盲盒结果通过OpenEggResult驱动抽卡界面与升级进度动画
 - Index列表的CheckIcon进入Check检视界面，ViewportFrame展示手办并支持拖拽旋转（+/-30）
 - 禁用系统背包，背包UI基于工具列表渲染，点击条目装备盲盒
 - 币数展示可基于 ServerTime + PendingCoins 推算，仅作表现

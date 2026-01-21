@@ -127,6 +127,41 @@ if bagGui:IsA("ScreenGui") then
 	bagGui.Enabled = true
 end
 
+local qualityIndicatorNames = {
+	[1] = "Leaf",
+	[2] = "Water",
+	[3] = "Lunar",
+	[4] = "Solar",
+	[5] = "Flame",
+	[6] = "Heart",
+	[7] = "Celestial",
+}
+
+local rarityNames = {
+	[1] = "Common",
+	[2] = "Light",
+	[3] = "Gold",
+	[4] = "Diamond",
+	[5] = "Rainbow",
+}
+
+local qualityIndicatorLookup = {}
+for _, name in pairs(qualityIndicatorNames) do
+	qualityIndicatorLookup[name] = true
+end
+
+local function updateQualityIndicators(container, quality)
+	if not container then
+		return
+	end
+	local targetName = qualityIndicatorNames[tonumber(quality) or 0]
+	for _, descendant in ipairs(container:GetDescendants()) do
+		if descendant:IsA("GuiObject") and qualityIndicatorLookup[descendant.Name] then
+			descendant.Visible = targetName ~= nil and descendant.Name == targetName
+		end
+	end
+end
+
 local currentBackpack = player:WaitForChild("Backpack")
 local currentCharacter = player.Character
 
@@ -160,12 +195,15 @@ local function setBackpackVisibility(isBagOpen)
 
 	local backpackGui = playerGui:FindFirstChild("BackpackGui")
 	if isBagOpen then
+		if backpackGui then
+			backpackGui:SetAttribute("BackpackForceHidden", true)
+		end
 		if counter.Value == 0 then
 			local corePrev = getCoreBackpackEnabled()
 			if type(corePrev) == "boolean" then
 				playerGui:SetAttribute("BackpackHideCorePrev", corePrev)
 			end
-			if backpackGui and backpackGui:IsA("ScreenGui") then
+			if backpackGui and backpackGui:IsA("LayerCollector") then
 				playerGui:SetAttribute("BackpackHideGuiPrev", backpackGui.Enabled)
 				backpackGui.Enabled = false
 			end
@@ -182,13 +220,16 @@ local function setBackpackVisibility(isBagOpen)
 			if type(corePrev) == "boolean" then
 				setCoreBackpackEnabled(corePrev)
 			end
-			if backpackGui and backpackGui:IsA("ScreenGui") then
+			if backpackGui and backpackGui:IsA("LayerCollector") then
 				local guiPrev = playerGui:GetAttribute("BackpackHideGuiPrev")
 				if type(guiPrev) == "boolean" then
 					backpackGui.Enabled = guiPrev
 				else
 					backpackGui.Enabled = true
 				end
+			end
+			if backpackGui then
+				backpackGui:SetAttribute("BackpackForceHidden", false)
 			end
 			playerGui:SetAttribute("BackpackHideCorePrev", nil)
 			playerGui:SetAttribute("BackpackHideGuiPrev", nil)
@@ -336,6 +377,7 @@ refresh = function()
 	for _, entry in ipairs(entries) do
 		local info = getCapsuleInfo(entry.Id)
 		local quality = info and info.Quality or nil
+		local rarity = tonumber(info and info.Rarity) or 1
 		if currentQualityFilter == nil or currentQualityFilter == quality then
 			local clone = template:Clone()
 			clone.Name = string.format("Capsule_%s", tostring(entry.Id))
@@ -351,8 +393,15 @@ refresh = function()
 
 			local nameLabel = clone:FindFirstChild("Name", true)
 			if nameLabel and nameLabel:IsA("TextLabel") then
-				nameLabel.Text = info and info.Name or tostring(entry.Id)
+				if rarity <= 1 then
+					nameLabel.Visible = false
+				else
+					nameLabel.Visible = true
+					nameLabel.Text = rarityNames[rarity] or tostring(rarity)
+				end
 			end
+
+			updateQualityIndicators(clone, quality)
 
 			local numberLabel = clone:FindFirstChild("Number", true)
 			if numberLabel and numberLabel:IsA("TextLabel") then

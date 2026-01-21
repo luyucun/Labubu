@@ -11,6 +11,7 @@ local Players = game:GetService("Players")
 local DataService = require(script.Parent:WaitForChild("DataService"))
 local EggService = require(script.Parent:WaitForChild("EggService"))
 local FigurineService = require(script.Parent:WaitForChild("FigurineService"))
+local ClaimService = require(script.Parent:WaitForChild("ClaimService"))
 
 local commands = {}
 
@@ -54,6 +55,17 @@ registerCommand("resetdata", "清空自己所有数据，格式: /resetdata", fu
 	EggService:ClearPlayerState(player)
 	FigurineService:UnbindPlayer(player)
 	FigurineService:BindPlayer(player)
+	ClaimService:ApplyAutoCollectState(player, false)
+end)
+
+registerCommand("autocollect", "获得自动领取功能（视为购买通行证）", function(player, args)
+	DataService:SetAutoCollect(player, true)
+	ClaimService:ApplyAutoCollectState(player, true)
+end)
+
+registerCommand("resetautocollect", "重置自动领取功能", function(player, args)
+	DataService:SetAutoCollect(player, false)
+	ClaimService:ApplyAutoCollectState(player, false)
 end)
 
 registerCommand("gmhelp", "查看GM命令列表，格式: /gmhelp", function(player, args)

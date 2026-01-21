@@ -829,3 +829,334 @@ Id	盲盒名字	盲盒品质	盲盒稀有度	盲盒模型名字	盲盒价格	开
         "D:\RobloxGame\Labubu\Labubu\鼠标向左滑动到极限.png"
         "D:\RobloxGame\Labubu\Labubu\鼠标向下滑动到极限.png"
         "D:\RobloxGame\Labubu\Labubu\鼠标向上滑动到极限.png"
+
+策划文档V2.9  领取全部/自动领取与十倍领取
+
+概述：我们需要在游戏内加入一些付费功能，分别是：一次性全部领取/一次性十倍领取所有金币/自动领取功能
+
+接下来我们按Player01的家园举例，来进行需求说明
+
+详细规则之领取全部：
+1.玩家触碰自家家园下的Workspace - Home - Player01 - Base - ClaimAll - Touch这个Part，触发对开发者道具：3514031081的购买
+2.玩家购买成功后，领取当前所有的未领取的金币，注意是玩家基地中属于玩家的所有手办产出的未领取的金币，一次性全部领取
+3.玩家进入游戏后，需要把Workspace - Home - Player01 - Base - ClaimAll - ClaimAll - CashNum的文本改成当前总共积累的未领取的金币总值，格式是$xxx，xxx是金币数值，这里也要用大数值逻辑来做
+4.注意不要连续触发多次，玩家触碰后，一定要离开后再次触碰，才触发这个购买
+
+详细规则之十倍全部领取：
+1.玩家触碰自家家园下的Workspace - Home - Player01 - Base - ClaimAllTen - Touch这个Part，触发对开发者道具：3514031237的购买
+2.玩家购买成功后，领取当前所有的未领取的金币数值的十倍，注意是玩家基地中属于玩家的所有手办产出的未领取的金币的十倍，一次性全部领取，比如当前积累了100点金币，那领取的就是1000
+3.玩家进入游戏后，需要把Workspace - Home - Player01 - Base - ClaimAllTen - CollectTen - Bg - CashNum文本改成当前总共积累的未领取的金币总值的10倍数值，格式是$xxx，xxx是金币数值，这里也要用大数值逻辑来做
+4.注意不要连续触发多次，玩家触碰后，一定要离开后再次触碰，才触发这个购买
+
+详细规则之自动领取：
+
+1.玩家触碰自家家园下的Workspace - Home - Player01 - Base - Auto - Touch这个Part，触发对通行证：1673138854的购买
+2.玩家购买成功这个通行证后，会获得自动收集功能
+3.在获得这个通行证后，需要把玩家家园内的ClaimAll和ClaimAllTen这两个Part都移除，让玩家无法再触发这俩开发者道具的购买
+4.再获得这个通行证后，需要把玩家家园内的Workspace - Home - Player01 - Base - Auto - AutoCollect - Inactive的Visible属性改成False，将Workspace - Home - Player01 - Base - Auto - AutoCollect - Active的Visible属性改成True
+5.注意：Workspace - Home - Player01 - Base - Auto - AutoCollect - Active - Collecting是一个班textlabel，当显示出来后，需要设定文本内容为Collecting，然后每0.7秒在文本后多加一个.，当达到三个点时，下一次清零重新从0个点开始，这样做出一个1/2/3个点来回循环的动态效果。
+6.具体动态效果可以看这个项目：D:\RobloxGame\Prison\prisongame中关于自动挑战部分，在开战后的文本表现形式，也是在后面三个点不断循环
+
+需要加的GM：加一个命令，让我能获得自动功能，也要能重置我的自动功能。当我获得了自动功能后要视为我购买成功了这个通行证。重置后视为我未购买
+
+补充规则：盲盒放置数量限制
+1.每个玩家家园内，地面最多可放置12个盲盒
+2.倒计时中的盲盒，以及倒计时结束但未打开的盲盒，都占用名额
+3.超过限制后无法放置到地上，并提示系统消息：Placement limit reached
+
+
+策划文档V3.0  开盲盒结果表现
+
+概述：我们需要在玩家开启盲盒后，给一个开盲盒过程表现，让玩家知道这次开的盲盒的结果是什么
+
+详细规则：
+
+1.玩家与盲盒交互开启盲盒后，需要先立刻弹出抽卡结果界面：
+    a.将StarterGui - GachaResult - Result显示出来（之前的默认Visible属性是false，显示出来就是改成True）
+    b.显示出来时，需要把StarterGui - GachaResult - Result - Cover的图片资源换成盲盒对应的展示图片（在盲盒表中会有配置）
+    c.出现时，需要有从屏幕外面滑进来到目标位置，快速滑进来，可以从屏幕下方滑动出来。
+    
+    以上是开启动画的第一步：弹出盲盒背面
+    下面是开启动画第二步：展示开启结果：
+    a.StarterGui - GachaResult - Result滑动到目标位置后，停留0.5秒，然后做一个翻转动画（注意这个翻转是朝屏幕里翻转那种翻转，不是上下翻转，比如一个图片，以中轴线为中心，然后翻转，也就是始终竖着的那种翻转，希望你能明白）
+    b.总体目标是翻转180度，看起来像翻面，当翻到90度时，需要立刻把StarterGui - GachaResult - Result - Cover隐藏起来，然后把StarterGui - GachaResult - Icon显示出来，这是手办图标，需要把StarterGui - GachaResult - Result - Name显示出来，这是手办名字，需要把StarterGui - GachaResult - Result - Rare显示出来，这是稀有度，需要把StarterGui - GachaResult - Result - Speed显示出来，这是基础产速
+    c.以上几个内容显示出来的时候，需要把这几个对应的信息替换成手办的对应信息
+    d.然后继续完成翻转，看起来是一个反面的过程
+    e.在翻面完成后，如果这是一个全新的从未获得过的手办，在翻面完成后，需要把StarterGui - GachaResult - Result - NewTitle显示出来
+
+    以上是开启动画的第三步，展示变化：
+    1.如果是已经获得过的卡，则在翻转完成瞬间，需要把StarterGui - GachaResult - LevelUp显示出来
+    2.LevelUp下也有Icon/Name/Rare/Speed这几个子节点，也要替换对应的信息
+    3.在LevelUp - Bg - Progressbar是一个进度条，Size用X的Scale，当Size是0，就是进度条为0，如果Size是1就是进度条满。同时LevelUp - Bg - Text是等级信息，格式是Lv.x,x是等级数字
+    4.当StarterGui - GachaResult - LevelUp显示出来后，需要立刻播进度条动画，进度条从当前进度线性变化到升级后的进度，在0.5秒内完成，在进度条动画播放完后，把等级文本更新成最新的等级文本
+    5.当进度条动画播放完成后，也要把LevelUp - Speed的文本内容替换为最新的产出速度，这里是经过产速公式计算后的最终产出速度
+
+    以上是开启动画的第三步，最后是第四步，共同消失：
+    1.在升级动画播放完成后，Result和LevelUp共同向屏幕上方滑动，移出屏幕，完成整个开启动画的展示
+    2.如果这是全新的卡，就不出现升级相关的内容（也就是第三步），展示完成后就向上移动移出屏幕即可
+
+2.如果开的是新卡，在卡移动出屏幕后，在开始播放新手办获得时，台子升起来的镜头动画，所以流程是：展示封面 - 开启 - 展示结果 - 卡消失 - 播放镜头动画
+
+
+我们需要在盲盒表中加入每个盲盒的展示图片字段信息，更新后的盲盒表是这样的：
+Id	盲盒名字	盲盒品质	盲盒稀有度	盲盒模型名字	盲盒价格	开启倒计时（秒）	盲盒对应卡池	盲盒icon	盲盒展示图片
+1001	Leaf	1	1	LeafCommon	50 	8	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+1002	Water	2	1	WaterCommon	1500 	40	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+1003	Lunar	3	1	LunarCommon	20000 	140	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+1004	Solar	4	1	SolarCommon	180000 	480	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+1005	Flame	5	1	FlameCommon	1200000 	1800	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+1006	Heart	6	1	HeartCommon	5000000 	6600	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+1007	Celestial	7	1	CelestialCommon	20000000 	19800	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+2001	Leaf	1	2	LeafLight	100 	9	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+2002	Water	2	2	WaterLight	3000 	44	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+2003	Lunar	3	2	LunarLight	40000 	154	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+2004	Solar	4	2	SolarLight	360000 	528	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+2005	Flame	5	2	FlameLight	2400000 	1980	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+2006	Heart	6	2	HeartLight	10000000 	7260	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+2007	Celestial	7	2	CelestialLight	40000000 	21780	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+3001	Leaf	1	3	LeafGold	300 	10	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+3002	Water	2	3	WaterGold	9000 	50	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+3003	Lunar	3	3	LunarGold	120000 	175	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+3004	Solar	4	3	SolarGold	1080000 	600	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+3005	Flame	5	3	FlameGold	7200000 	2250	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+3006	Heart	6	3	HeartGold	30000000 	8250	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+3007	Celestial	7	3	CelestialGold	120000000 	24750	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+4001	Leaf	1	4	LeafDiamond	750 	12	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+4002	Water	2	4	WaterDiamond	22500 	58	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+4003	Lunar	3	4	LunarDiamond	300000 	203	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+4004	Solar	4	4	SolarDiamond	2700000 	696	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+4005	Flame	5	4	FlameDiamond	18000000 	2610	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+4006	Heart	6	4	HeartDiamond	75000000 	9570	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+4007	Celestial	7	4	CelestialDiamond	300000000 	28710	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+5001	Leaf	1	5	LeafRainbow	2500 	14	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+5002	Water	2	5	WaterRainbow	75000 	68	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+5003	Lunar	3	5	LunarRainbow	1000000 	238	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+5004	Solar	4	5	SolarRainbow	9000000 	816	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+5005	Flame	5	5	FlameRainbow	60000000 	3060	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+5006	Heart	6	5	HeartRainbow	250000000 	11220	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+5007	Celestial	7	5	CelestialRainbow	1000000000 	33660	99001	rbxassetid://98616255072587	rbxassetid://98616255072587
+
+
+需要同步为我更新盲盒配置表
+
+
+策划文档V3.1  更新一版手办表 
+id	手办名字	金币基础产速	品质	稀有度	模型资源	对应展台路径	对应领取按钮路径	手办icon
+10001	绿叶布布1	1	1	1	Leaf/LBB01	ShowCase/Green/Position1	ButtonGreen/Button1	rbxassetid://106915271340222
+10002	绿叶布布2	2	1	1	Leaf/LBB02	ShowCase/Green/Position2	ButtonGreen/Button2	rbxassetid://105301091167285
+10003	绿叶布布3	3	1	1	Leaf/LBB03	ShowCase/Green/Position3	ButtonGreen/Button3	rbxassetid://92602393759769
+10004	绿叶布布4	4	1	1	Leaf/LBB04	ShowCase/Green/Position4	ButtonGreen/Button4	rbxassetid://77465737689764
+10005	绿叶布布5	5	1	1	Leaf/LBB05	ShowCase/Green/Position5	ButtonGreen/Button5	rbxassetid://128609371638881
+10006	绿叶布布6	6	1	1	Leaf/LBB06	ShowCase/Green/Position6	ButtonGreen/Button6	rbxassetid://77006643082762
+10007	绿叶布布7	7	1	1	Leaf/LBB07	ShowCase/Green/Position7	ButtonGreen/Button7	rbxassetid://97576907938982
+10008	绿叶布布8	8	1	1	Leaf/LBB08	ShowCase/Green/Position8	ButtonGreen/Button8	rbxassetid://100640430095892
+10009	绿叶布布9	10	1	1	Leaf/LBB09	ShowCase/Green/Position9	ButtonGreen/Button9	rbxassetid://107958283001957
+20001	水布布1	50	2	1	Water/LBB01	ShowCase/Blue/Position1	ButtonBlue/Button1	rbxassetid://73924471186576
+20002	水布布2	56	2	1	Water/LBB02	ShowCase/Blue/Position2	ButtonBlue/Button2	rbxassetid://97475868474045
+20003	水布布3	63	2	1	Water/LBB03	ShowCase/Blue/Position3	ButtonBlue/Button3	rbxassetid://94121257331073
+20004	水布布4	71	2	1	Water/LBB04	ShowCase/Blue/Position4	ButtonBlue/Button4	rbxassetid://80371625018349
+20005	水布布5	80	2	1	Water/LBB05	ShowCase/Blue/Position5	ButtonBlue/Button5	rbxassetid://131567376824995
+20006	水布布6	90	2	1	Water/LBB06	ShowCase/Blue/Position6	ButtonBlue/Button6	rbxassetid://98646372357977
+20007	水布布7	102	2	1	Water/LBB07	ShowCase/Blue/Position7	ButtonBlue/Button7	rbxassetid://131567376824995
+20008	水布布8	116	2	1	Water/LBB07	ShowCase/Blue/Position8	ButtonBlue/Button8	rbxassetid://120763170661369
+20009	水布布9	132	2	1	Water/LBB09	ShowCase/Blue/Position9	ButtonBlue/Button9	rbxassetid://87646054592825
+30001	月球布布1	220	3	1	Lunar/LBB01	ShowCase/Purple/Position1	ButtonPurple/Button1	rbxassetid://116214626452083
+30002	月球布布2	250	3	1	Lunar/LBB02	ShowCase/Purple/Position2	ButtonPurple/Button2	rbxassetid://133690692800448
+30003	月球布布3	285	3	1	Lunar/LBB02	ShowCase/Purple/Position3	ButtonPurple/Button3	rbxassetid://77847158725505
+30004	月球布布4	325	3	1	Lunar/LBB02	ShowCase/Purple/Position4	ButtonPurple/Button4	rbxassetid://100929113578714
+30005	月球布布5	370	3	1	Lunar/LBB02	ShowCase/Purple/Position5	ButtonPurple/Button5	rbxassetid://77847158725505
+30006	月球布布6	420	3	1	Lunar/LBB02	ShowCase/Purple/Position6	ButtonPurple/Button6	rbxassetid://98084586375258
+30007	月球布布7	480	3	1	Lunar/LBB02	ShowCase/Purple/Position7	ButtonPurple/Button7	rbxassetid://81392569495246
+30008	月球布布8	550	3	1	Lunar/LBB02	ShowCase/Purple/Position8	ButtonPurple/Button8	rbxassetid://107529498094392
+30009	月球布布9	630	3	1	Lunar/LBB02	ShowCase/Purple/Position9	ButtonPurple/Button9	rbxassetid://107304908021027
+40001	太阳布布1	950	4	1	Solar/LBB01	ShowCase/Orange/Position1	ButtonOrange/Button1	rbxassetid://123301796994352
+40002	太阳布布2	1080	4	1	Solar/LBB02	ShowCase/Orange/Position2	ButtonOrange/Button2	rbxassetid://135903948038055
+40003	太阳布布3	1230	4	1	Solar/LBB03	ShowCase/Orange/Position3	ButtonOrange/Button3	rbxassetid://137010302356268
+40004	太阳布布4	1400	4	1	Solar/LBB04	ShowCase/Orange/Position4	ButtonOrange/Button4	rbxassetid://133825497379267
+40005	太阳布布5	1600	4	1	Solar/LBB04	ShowCase/Orange/Position5	ButtonOrange/Button5	rbxassetid://78728521411560
+40006	太阳布布6	1830	4	1	Solar/LBB04	ShowCase/Orange/Position6	ButtonOrange/Button6	rbxassetid://98165717690396
+40007	太阳布布7	2100	4	1	Solar/LBB04	ShowCase/Orange/Position7	ButtonOrange/Button7	rbxassetid://133103323967935
+40008	太阳布布8	2400	4	1	Solar/LBB04	ShowCase/Orange/Position8	ButtonOrange/Button8	rbxassetid://71595524788019
+40009	太阳布布9	2750	4	1	Solar/LBB04	ShowCase/Orange/Position9	ButtonOrange/Button9	rbxassetid://132021136924285
+50001	火焰布布1	3000	5	1	Flame/LBB01	ShowCase/Red/Position1	ButtonRed/Button1	rbxassetid://81520307684372
+50002	火焰布布2	3400	5	1	Flame/LBB01	ShowCase/Red/Position2	ButtonRed/Button2	rbxassetid://90342220987736
+50003	火焰布布3	3850	5	1	Flame/LBB01	ShowCase/Red/Position3	ButtonRed/Button3	rbxassetid://73676714004019
+50004	火焰布布4	4350	5	1	Flame/LBB01	ShowCase/Red/Position4	ButtonRed/Button4	rbxassetid://108104612245462
+50005	火焰布布5	4900	5	1	Flame/LBB01	ShowCase/Red/Position5	ButtonRed/Button5	rbxassetid://121911610580026
+50006	火焰布布6	5550	5	1	Flame/LBB01	ShowCase/Red/Position6	ButtonRed/Button6	rbxassetid://107904367562204
+50007	火焰布布7	6300	5	1	Flame/LBB01	ShowCase/Red/Position7	ButtonRed/Button7	rbxassetid://98108287971614
+60001	心脏布布1	12000	6	1	Heart/LBB01	ShowCase/Yellow/Position1	ButtonYellow/Button1	rbxassetid://129520383058807
+60002	心脏布布2	13200	6	1	Heart/LBB02	ShowCase/Yellow/Position2	ButtonYellow/Button2	rbxassetid://125879099426075
+60003	心脏布布3	14600	6	1	Heart/LBB03	ShowCase/Yellow/Position3	ButtonYellow/Button3	rbxassetid://131333015213094
+60004	心脏布布4	16200	6	1	Heart/LBB04	ShowCase/Yellow/Position4	ButtonYellow/Button4	rbxassetid://136225094377885
+60005	心脏布布5	18000	6	1	Heart/LBB04	ShowCase/Yellow/Position5	ButtonYellow/Button5	rbxassetid://112335648315899
+60006	心脏布布6	20000	6	1	Heart/LBB04	ShowCase/Yellow/Position6	ButtonYellow/Button6	rbxassetid://84929220767434
+60007	心脏布布7	22300	6	1	Heart/LBB04	ShowCase/Yellow/Position7	ButtonYellow/Button7	rbxassetid://136190154597023
+70001	虚空布布1	33000	7	1	Heart/LBB01	ShowCase/Blue/Position1	ButtonBlue/Button1	rbxassetid://137355628441296
+70002	虚空布布2	38000	7	1	Heart/LBB02	ShowCase/Blue/Position2	ButtonBlue/Button2	rbxassetid://105553650967188
+70003	虚空布布3	44000	7	1	Heart/LBB03	ShowCase/Blue/Position3	ButtonBlue/Button3	rbxassetid://83967828201151
+70004	虚空布布4	51000	7	1	Heart/LBB04	ShowCase/Blue/Position4	ButtonBlue/Button4	rbxassetid://135305551396163
+70005	虚空布布5	59000	7	1	Heart/LBB04	ShowCase/Blue/Position5	ButtonBlue/Button5	rbxassetid://78448815998112
+
+以上是我更新后的手办表，需要你帮我更新配置
+
+策划文档V3.2 关于镜头动画的一些调整
+
+1.现在抽卡动画结束后，镜头时立刻对准目标开始播放动画，现在希望抽卡动画结束后的时间再延长一点再去对准目标播动画
+2.在动画结束后，以前是立刻回到玩家镜头，现在需要修改为：镜头动画播放完后，保持结束状态，然后把StarterGui - Camera - Exit的Visivle属性改成True显示出来
+3.玩家点击Exit按钮，立刻恢复玩家镜头，但是注意：是硬切，不要做之前的镜头线性返回的效果了
+
+另外补充一个规则：玩家点击StarterGui - MainGui - Home按钮，立刻将玩家传送回基地出生位置
+
+策划文档V3.3 补充关于index的功能
+
+在我们的index界面中，有关于每个品质解锁了多少个的显示，现在我们在界面上增加了图标的展示功能
+具体规则是：
+
+1.玩家切换页签切换品质的时候，需要把StarterGui - Index - IndexBg - InfoBg - CurrentIcon的图片内容换成对应品质的图标
+
+品质与对应的图标是：
+
+品质1	leaf	rbxassetid://108955563208582
+品质2	water	rbxassetid://133424751984403
+品质3	lunar	rbxassetid://97174425150192
+品质4	solar	rbxassetid://130407159333392
+品质5	flame	rbxassetid://137727751536051
+品质6	heart	rbxassetid://115976015958196
+品质7	celestial	rbxassetid://110967078953865
+
+
+策划文档V3.4 修改一下盲盒表相关的配置
+
+Id	盲盒名字	盲盒品质	盲盒稀有度	盲盒模型名字	盲盒价格	开启倒计时（秒）	盲盒对应卡池	盲盒icon	盲盒展示图片
+1001	Leaf	1	1	LeafCommon	50 	8	99001	rbxassetid://107877804846649	rbxassetid://98616255072587
+1002	Water	2	1	WaterCommon	1500 	40	99001	rbxassetid://91134558890103	rbxassetid://98616255072587
+1003	Lunar	3	1	LunarCommon	20000 	140	99001	rbxassetid://121158065949906	rbxassetid://98616255072587
+1004	Solar	4	1	SolarCommon	180000 	480	99001	rbxassetid://123720993696670	rbxassetid://98616255072587
+1005	Flame	5	1	FlameCommon	1200000 	1800	99001	rbxassetid://95224550415811	rbxassetid://98616255072587
+1006	Heart	6	1	HeartCommon	5000000 	6600	99001	rbxassetid://127841276677202	rbxassetid://98616255072587
+1007	Celestial	7	1	CelestialCommon	20000000 	19800	99001	rbxassetid://120738172280657	rbxassetid://98616255072587
+2001	Leaf	1	2	LeafLight	100 	9	99001	rbxassetid://107877804846649	rbxassetid://98616255072587
+2002	Water	2	2	WaterLight	3000 	44	99001	rbxassetid://91134558890103	rbxassetid://98616255072587
+2003	Lunar	3	2	LunarLight	40000 	154	99001	rbxassetid://121158065949906	rbxassetid://98616255072587
+2004	Solar	4	2	SolarLight	360000 	528	99001	rbxassetid://123720993696670	rbxassetid://98616255072587
+2005	Flame	5	2	FlameLight	2400000 	1980	99001	rbxassetid://95224550415811	rbxassetid://98616255072587
+2006	Heart	6	2	HeartLight	10000000 	7260	99001	rbxassetid://127841276677202	rbxassetid://98616255072587
+2007	Celestial	7	2	CelestialLight	40000000 	21780	99001	rbxassetid://120738172280657	rbxassetid://98616255072587
+3001	Leaf	1	3	LeafGold	300 	10	99001	rbxassetid://107877804846649	rbxassetid://98616255072587
+3002	Water	2	3	WaterGold	9000 	50	99001	rbxassetid://91134558890103	rbxassetid://98616255072587
+3003	Lunar	3	3	LunarGold	120000 	175	99001	rbxassetid://121158065949906	rbxassetid://98616255072587
+3004	Solar	4	3	SolarGold	1080000 	600	99001	rbxassetid://123720993696670	rbxassetid://98616255072587
+3005	Flame	5	3	FlameGold	7200000 	2250	99001	rbxassetid://95224550415811	rbxassetid://98616255072587
+3006	Heart	6	3	HeartGold	30000000 	8250	99001	rbxassetid://127841276677202	rbxassetid://98616255072587
+3007	Celestial	7	3	CelestialGold	120000000 	24750	99001	rbxassetid://120738172280657	rbxassetid://98616255072587
+4001	Leaf	1	4	LeafDiamond	750 	12	99001	rbxassetid://107877804846649	rbxassetid://98616255072587
+4002	Water	2	4	WaterDiamond	22500 	58	99001	rbxassetid://91134558890103	rbxassetid://98616255072587
+4003	Lunar	3	4	LunarDiamond	300000 	203	99001	rbxassetid://121158065949906	rbxassetid://98616255072587
+4004	Solar	4	4	SolarDiamond	2700000 	696	99001	rbxassetid://123720993696670	rbxassetid://98616255072587
+4005	Flame	5	4	FlameDiamond	18000000 	2610	99001	rbxassetid://95224550415811	rbxassetid://98616255072587
+4006	Heart	6	4	HeartDiamond	75000000 	9570	99001	rbxassetid://127841276677202	rbxassetid://98616255072587
+4007	Celestial	7	4	CelestialDiamond	300000000 	28710	99001	rbxassetid://120738172280657	rbxassetid://98616255072587
+5001	Leaf	1	5	LeafRainbow	2500 	14	99001	rbxassetid://107877804846649	rbxassetid://98616255072587
+5002	Water	2	5	WaterRainbow	75000 	68	99001	rbxassetid://91134558890103	rbxassetid://98616255072587
+5003	Lunar	3	5	LunarRainbow	1000000 	238	99001	rbxassetid://121158065949906	rbxassetid://98616255072587
+5004	Solar	4	5	SolarRainbow	9000000 	816	99001	rbxassetid://123720993696670	rbxassetid://98616255072587
+5005	Flame	5	5	FlameRainbow	60000000 	3060	99001	rbxassetid://95224550415811	rbxassetid://98616255072587
+5006	Heart	6	5	HeartRainbow	250000000 	11220	99001	rbxassetid://127841276677202	rbxassetid://98616255072587
+5007	Celestial	7	5	CelestialRainbow	1000000000 	33660	99001	rbxassetid://120738172280657	rbxassetid://98616255072587
+
+
+策划文档V3.5 关于背包信息的修改（BackpackGui）
+
+在背包中出现的盲盒，需要补充这个盲盒的品质信息
+StarterGui - BackpackGui - BackpackFrame - ItemListFrame - ArmyTemplate - Rare是品质信息
+当这个盲盒的品质是最低的1（common）时，不显示
+当盲盒品质是其他的品质时，需要把Rare的文本内容改成品质名字，并显示出来
+
+
+
+策划文档V3.6 更新手办表信息
+
+id	手办名字	金币基础产速	品质	稀有度	模型资源	对应展台路径	对应领取按钮路径	手办icon
+10001	Greyshade Sneak	1	1	1	Leaf/LBB01	ShowCase/Green/Position1	ButtonGreen/Button1	rbxassetid://106915271340222
+10002	Starcharm Mechanic	2	1	1	Leaf/LBB02	ShowCase/Green/Position2	ButtonGreen/Button2	rbxassetid://105301091167285
+10003	Minty Squint	3	1	1	Leaf/LBB03	ShowCase/Green/Position3	ButtonGreen/Button3	rbxassetid://92602393759769
+10004	Pinecone Redtail	4	1	1	Leaf/LBB04	ShowCase/Green/Position4	ButtonGreen/Button4	rbxassetid://77465737689764
+10005	Tiny Tiger Brave	5	1	1	Leaf/LBB05	ShowCase/Green/Position5	ButtonGreen/Button5	rbxassetid://128609371638881
+10006	Bluefrost Cone	6	1	1	Leaf/LBB06	ShowCase/Green/Position6	ButtonGreen/Button6	rbxassetid://77006643082762
+10007	Honeydoze	7	1	1	Leaf/LBB07	ShowCase/Green/Position7	ButtonGreen/Button7	rbxassetid://97576907938982
+10008	Forest Basketling	8	1	1	Leaf/LBB08	ShowCase/Green/Position8	ButtonGreen/Button8	rbxassetid://100640430095892
+10009	Berrybramble Bear	10	1	1	Leaf/LBB09	ShowCase/Green/Position9	ButtonGreen/Button9	rbxassetid://107958283001957
+20001	Emerald Bonk	50	2	1	Water/LBB01	ShowCase/Blue/Position1	ButtonBlue/Button1	rbxassetid://73924471186576
+20002	Rainbow Drizzle	56	2	1	Water/LBB02	ShowCase/Blue/Position2	ButtonBlue/Button2	rbxassetid://97475868474045
+20003	Violet Giftling	63	2	1	Water/LBB03	ShowCase/Blue/Position3	ButtonBlue/Button3	rbxassetid://94121257331073
+20004	Frogleaf	71	2	1	Water/LBB04	ShowCase/Blue/Position4	ButtonBlue/Button4	rbxassetid://80371625018349
+20005	Rosehug	80	2	1	Water/LBB05	ShowCase/Blue/Position5	ButtonBlue/Button5	rbxassetid://131567376824995
+20006	Snowpuff	90	2	1	Water/LBB06	ShowCase/Blue/Position6	ButtonBlue/Button6	rbxassetid://98646372357977
+20007	Party Box Pop	102	2	1	Water/LBB07	ShowCase/Blue/Position7	ButtonBlue/Button7	rbxassetid://131567376824995
+20008	Splashring	116	2	1	Water/LBB08	ShowCase/Blue/Position8	ButtonBlue/Button8	rbxassetid://120763170661369
+20009	Seastar Chanter	132	2	1	Water/LBB09	ShowCase/Blue/Position9	ButtonBlue/Button9	rbxassetid://87646054592825
+30001	Pajama Snoozer	220	3	1	Lunar/LBB01	ShowCase/Purple/Position1	ButtonPurple/Button1	rbxassetid://116214626452083
+30002	Starseam Witchlet	250	3	1	Lunar/LBB02	ShowCase/Purple/Position2	ButtonPurple/Button2	rbxassetid://133690692800448
+30003	Nightclaw	285	3	1	Lunar/LBB03	ShowCase/Purple/Position3	ButtonPurple/Button3	rbxassetid://77847158725505
+30004	Halo Hymn	325	3	1	Lunar/LBB04	ShowCase/Purple/Position4	ButtonPurple/Button4	rbxassetid://100929113578714
+30005	Specs Scholar	370	3	1	Lunar/LBB05	ShowCase/Purple/Position5	ButtonPurple/Button5	rbxassetid://77847158725505
+30006	Wanderbow	420	3	1	Lunar/LBB06	ShowCase/Purple/Position6	ButtonPurple/Button6	rbxassetid://98084586375258
+30007	Prismfeather Sprite	480	3	1	Lunar/LBB07	ShowCase/Purple/Position7	ButtonPurple/Button7	rbxassetid://81392569495246
+30008	Greyshade Gentleman	550	3	1	Lunar/LBB08	ShowCase/Purple/Position8	ButtonPurple/Button8	rbxassetid://107529498094392
+30009	Pumpkin Ghast	630	3	1	Lunar/LBB09	ShowCase/Purple/Position9	ButtonPurple/Button9	rbxassetid://107304908021027
+40001	Sunblossom	950	4	1	Solar/LBB01	ShowCase/Orange/Position1	ButtonOrange/Button1	rbxassetid://123301796994352
+40002	Flowercrown Bride	1080	4	1	Solar/LBB02	ShowCase/Orange/Position2	ButtonOrange/Button2	rbxassetid://135903948038055
+40003	Twinbasket Harvest	1230	4	1	Solar/LBB03	ShowCase/Orange/Position3	ButtonOrange/Button3	rbxassetid://137010302356268
+40004	Leafwing Dino	1400	4	1	Solar/LBB04	ShowCase/Orange/Position4	ButtonOrange/Button4	rbxassetid://133825497379267
+40005	Broomlet Witch	1600	4	1	Solar/LBB05	ShowCase/Orange/Position5	ButtonOrange/Button5	rbxassetid://78728521411560
+40006	Swinggiggle	1830	4	1	Solar/LBB06	ShowCase/Orange/Position6	ButtonOrange/Button6	rbxassetid://98165717690396
+40007	Vinewreath Wisher	2100	4	1	Solar/LBB07	ShowCase/Orange/Position7	ButtonOrange/Button7	rbxassetid://133103323967935
+40008	Lemon Pilot	2400	4	1	Solar/LBB08	ShowCase/Orange/Position8	ButtonOrange/Button8	rbxassetid://71595524788019
+40009	Cosmo Drifter	2750	4	1	Solar/LBB09	ShowCase/Orange/Position9	ButtonOrange/Button9	rbxassetid://132021136924285
+50001	Bombsnit	3000	5	1	Flame/LBB01	ShowCase/Red/Position1	ButtonRed/Button1	rbxassetid://81520307684372
+50002	Flamecrown Blade	3400	5	1	Flame/LBB02	ShowCase/Red/Position2	ButtonRed/Button2	rbxassetid://90342220987736
+50003	Blazefuzz King	3850	5	1	Flame/LBB03	ShowCase/Red/Position3	ButtonRed/Button3	rbxassetid://73676714004019
+50004	Roseveil Count	4350	5	1	Flame/LBB04	ShowCase/Red/Position4	ButtonRed/Button4	rbxassetid://108104612245462
+50005	Inferno Fanlord	4900	5	1	Flame/LBB05	ShowCase/Red/Position5	ButtonRed/Button5	rbxassetid://121911610580026
+50006	Neon Skater	5550	5	1	Flame/LBB06	ShowCase/Red/Position6	ButtonRed/Button6	rbxassetid://107904367562204
+50007	Crystal Seer	6300	5	1	Flame/LBB07	ShowCase/Red/Position7	ButtonRed/Button7	rbxassetid://98108287971614
+60001	Snowroll Buddy	12000	6	1	Heart/LBB01	ShowCase/Yellow/Position1	ButtonYellow/Button1	rbxassetid://129520383058807
+60002	Bubbleballerina	13200	6	1	Heart/LBB02	ShowCase/Yellow/Position2	ButtonYellow/Button2	rbxassetid://125879099426075
+60003	Seamoon Siren	14600	6	1	Heart/LBB03	ShowCase/Yellow/Position3	ButtonYellow/Button3	rbxassetid://131333015213094
+60004	Butterglow Fairy	16200	6	1	Heart/LBB04	ShowCase/Yellow/Position4	ButtonYellow/Button4	rbxassetid://136225094377885
+60005	Nurse Nuzzle	18000	6	1	Heart/LBB05	ShowCase/Yellow/Position5	ButtonYellow/Button5	rbxassetid://112335648315899
+60006	Redflag Climber	20000	6	1	Heart/LBB06	ShowCase/Yellow/Position6	ButtonYellow/Button6	rbxassetid://84929220767434
+60007	Sakura Fest	22300	6	1	Heart/LBB07	ShowCase/Yellow/Position7	ButtonYellow/Button7	rbxassetid://136190154597023
+70001	Starfloat	33000	7	1	Celestial/LBB01	ShowCase/Blue/Position1	ButtonBlue/Button1	rbxassetid://137355628441296
+70002	Thunder Sprout	38000	7	1	Celestial/LBB02	ShowCase/Blue/Position2	ButtonBlue/Button2	rbxassetid://105553650967188
+70003	Whitewing Prayer	44000	7	1	Celestial/LBB03	ShowCase/Blue/Position3	ButtonBlue/Button3	rbxassetid://83967828201151
+70004	Balloon Cakeling	51000	7	1	Celestial/LBB04	ShowCase/Blue/Position4	ButtonBlue/Button4	rbxassetid://135305551396163
+70005	Rainbow Unicorn Knight	59000	7	1	Celestial/LBB05	ShowCase/Blue/Position5	ButtonBlue/Button5	rbxassetid://78448815998112
+
+
+策划文档V3.7 关于Index界面的一些修改
+
+我们补充以下规则：
+
+1.我们的每个手办的图标在界面中显示时，因为每个手办都有其对应的品质，所以我们需要在Index界面上显示出手办信息时，展示对应的品质
+2.展示对应的品质的时候，有个逻辑是：
+    a.StarterGui - Index - IndexBg - InfoBg - ScrollingFrame - FigurineTemplate下有多个图片，分别对应我们的每个品质
+    b.比如Flame/Celestial/Heart/Leaf/Lunar/Solar/Water等，每个的Visible属性都是false
+    c.当一个手办信息生成时，需要根据这个手办的品质，决定把哪个图片显示出来，比如leaf的品质，就把Leaf图片显示出来
+
+策划文档V3.8 关于Bag界面的一些修改
+
+我们补充以下规则：
+1.跟上述的Index界面一样，我们也需要给每个盲盒显示对应的背景。
+2.StarterGui - Bag - BagBg - ScrollingFrame - CapsuleTemplate下有多个图片，分别对应我们的每个品质
+3.比如Flame/Celestial/Heart/Leaf/Lunar/Solar/Water等，每个的Visible属性都是false
+4.当一个盲盒信息生成时，需要根据这个盲盒的品质，决定把哪个图片显示出来，比如leaf的品质，就把Leaf图片显示出来
+
+原来是StarterGui - Bag - BagBg - ScrollingFrame - CapsuleTemplate - Name原来是显示盲盒名字，现在改成：显示稀有度名字，和backpack里面的逻辑是一样的，如果是common就不显示，其他的显示稀有度的名字
+
+策划文档V3.9 关于抽卡动画效果的规则补充
+
+1.展示动画第一步，需要把StarterGui - GachaResult - Result - Cover的图标改成这个盲盒对应的图标，同时像上述V3.7和V3.8部分的逻辑一样，在StarterGui - GachaResult - Result下也有各个品质的图，需要把品质图显示出来
+2.展示动画第二步（转换信息的时候），需要同步更改Icon/Name/Rare/Speed相关的信息，这些我都设定成了Visible默认False，展示出来时要改成True
+3.同时LevelUp界面也是的，下面也有各个品质的图片，显示出来时，要把对应的品质的名字的图片显示出来

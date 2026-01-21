@@ -15,10 +15,13 @@ local EggService = require(script.Parent:WaitForChild("EggService"))
 local FigurineService = require(script.Parent:WaitForChild("FigurineService"))
 local HomeService = require(script.Parent:WaitForChild("HomeService"))
 local ConveyorService = require(script.Parent:WaitForChild("ConveyorService"))
+local ClaimService = require(script.Parent:WaitForChild("ClaimService"))
+local LeaderboardService = require(script.Parent:WaitForChild("LeaderboardService"))
 
 Players.CharacterAutoLoads = false
 
 HomeService:Init()
+ClaimService:Init()
 DataService:StartAutoSave()
 
 game:BindToClose(function()
@@ -29,25 +32,29 @@ Players.PlayerAdded:Connect(function(player)
 	print(string.format("[Bootstrap] PlayerAdded: %s (userId=%d)", player.Name, player.UserId))
 
 	if #Players:GetPlayers() > GameConfig.MaxPlayers then
-		player:Kick("服务器已满")
+		player:Kick("Server is full")
 		return
 	end
 
 	local homeSlot = HomeService:AssignHome(player)
 	print(string.format("[Bootstrap] AssignHome returned: %s", tostring(homeSlot)))
 	if not homeSlot then
-		player:Kick("服务器已满")
+		player:Kick("Server is full")
 		return
 	end
 	print(string.format("[Bootstrap] homeSlot.Folder = %s", tostring(homeSlot.Folder)))
 
 	DataService:LoadPlayer(player)
 	print("[Bootstrap] DataService:LoadPlayer done")
+	LeaderboardService:BindPlayer(player)
 
 	EggService:BindPlayer(player)
 	print("[Bootstrap] EggService:BindPlayer done")
 
 	FigurineService:BindPlayer(player)
+
+	ClaimService:BindPlayer(player)
+	print("[Bootstrap] ClaimService:BindPlayer done")
 	print("[Bootstrap] FigurineService:BindPlayer done")
 
 	print("[Bootstrap] Calling ConveyorService:StartForPlayer...")
@@ -67,6 +74,8 @@ Players.PlayerRemoving:Connect(function(player)
 	ConveyorService:StopForPlayer(player)
 	EggService:UnbindPlayer(player)
 	FigurineService:UnbindPlayer(player)
+	ClaimService:UnbindPlayer(player)
+	LeaderboardService:UnbindPlayer(player)
 	DataService:UnloadPlayer(player, true)
 	HomeService:ReleaseHome(player)
 end)

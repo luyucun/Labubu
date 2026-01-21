@@ -19,6 +19,7 @@ ReplicatedStorage
         ├── CollectPetCoins（RemoteEvent）
         ├── PetCoinsCollected（RemoteEvent）
         ├── DataDelta（RemoteEvent）
+        ├── GoHome（RemoteEvent）
         └── ErrorHint（RemoteEvent）
 
 事件清单
@@ -46,7 +47,7 @@ ReplicatedStorage
 - 校验: 归属(OwnerUserId)、距离、金币、蛋存在且未过期、冷却/防重
 
 6. PlaceEgg (C->S)
-- 参数: EggUid, Position, Rotation
+- 参数: EggUid或CapsuleId, Position, Rotation(可选)
 - 说明: 从背包放置到自家地板
 - 校验: 归属、位置在自家范围/格位、无阻挡、占用检查、背包中存在、冷却/防重
 
@@ -56,8 +57,8 @@ ReplicatedStorage
 - 校验: 归属、孵化完成、蛋存在、冷却/防重
 
 8. OpenEggResult (S->C)
-- 参数: PetId, Rank, NewLevel, AddedCount
-- 说明: 服务端返回开蛋结果，用于表现与UI
+- 参数: CapsuleId, FigurineId, IsNew, Rarity, PrevLevel, PrevExp, Level, Exp, MaxLevel
+- 说明: 服务端返回开蛋结果与升级数据，用于抽卡翻面/升级进度表现
 
 9. CollectPetCoins (C->S)
 - 参数: PetId
@@ -72,7 +73,12 @@ ReplicatedStorage
 - 参数: DeltaTable, BaseVersion, NewVersion
 - 说明: 数据增量推送（金币/背包/宠物状态等）
 
-12. ErrorHint (S->C)
+12. GoHome (C->S)
+- 参数: 无
+- 说明: 客户端点击主界面Home按钮请求传送回基地出生点
+- 校验: 归属(HomeSlot/OwnerUserId)、冷却/防刷(可选)
+
+13. ErrorHint (S->C)
 - 参数: Code, Message
 - 说明: 统一错误提示
 

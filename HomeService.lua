@@ -25,6 +25,40 @@ local function formatHomeName(index)
 	return string.format("%s%02d", GameConfig.HomeSlotPrefix, index)
 end
 
+local function ensureLabubuEvents()
+	local eventsFolder = ReplicatedStorage:FindFirstChild("Events")
+	if not eventsFolder then
+		eventsFolder = Instance.new("Folder")
+		eventsFolder.Name = "Events"
+		eventsFolder.Parent = ReplicatedStorage
+	end
+	local labubuEvents = eventsFolder:FindFirstChild("LabubuEvents")
+	if not labubuEvents then
+		labubuEvents = Instance.new("Folder")
+		labubuEvents.Name = "LabubuEvents"
+		labubuEvents.Parent = eventsFolder
+	end
+	return labubuEvents
+end
+
+local function ensureGoHomeEvent()
+	local labubuEvents = ensureLabubuEvents()
+	local event = labubuEvents:FindFirstChild("GoHome")
+	if event and not event:IsA("RemoteEvent") then
+		event:Destroy()
+		event = nil
+	end
+	if not event then
+		event = Instance.new("RemoteEvent")
+		event.Name = "GoHome"
+		event.Parent = labubuEvents
+	end
+	return event
+end
+
+local goHomeEvent = ensureGoHomeEvent()
+local goHomeBound = false
+
 local function resolvePlayerInfoNodes(homeFolder)
 	if not homeFolder then
 		return nil
@@ -82,6 +116,34 @@ local function resolveClaimAllCFrame(homeFolder)
 		return claimAll.WorldCFrame
 	end
 	return nil
+end
+
+local function teleportToSlot(player, slot)
+	if not player or not player.Parent then
+		return
+	end
+	if not slot or not slot.SpawnLocation then
+		return
+	end
+	if slot.OwnerUserId and slot.OwnerUserId ~= player.UserId then
+		return
+	end
+	local character = player.Character
+	local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+	if not rootPart then
+		return
+	end
+	local spawnPos = slot.SpawnLocation.Position + Vector3.new(0, 3, 0)
+	local claimAllCFrame = resolveClaimAllCFrame(slot.Folder)
+	if claimAllCFrame then
+		local targetPos = claimAllCFrame.Position
+		local lookPos = Vector3.new(targetPos.X, spawnPos.Y, targetPos.Z)
+		if (lookPos - spawnPos).Magnitude > 0.05 then
+			rootPart.CFrame = CFrame.lookAt(spawnPos, lookPos)
+			return
+		end
+	end
+	rootPart.CFrame = slot.SpawnLocation.CFrame + Vector3.new(0, 3, 0)
 end
 
 local function updateSpeedLabel(player, speedLabel)
@@ -168,6 +230,13 @@ function HomeService:Init()
 			warn(string.format("HomeService missing folder: %s", formatHomeName(i)))
 		end
 	end
+
+	if goHomeEvent and not goHomeBound then
+		goHomeBound = true
+		goHomeEvent.OnServerEvent:Connect(function(player)
+			HomeService:TeleportHome(player)
+		end)
+	end
 end
 
 local function setOwnerAttribute(slot, userId)
@@ -230,6 +299,24 @@ function HomeService:ApplySpawn(player, slot)
 			rootPart.CFrame = slot.SpawnLocation.CFrame + Vector3.new(0, 3, 0)
 		end
 	end)
+end
+
+function HomeService:TeleportHome(player)
+	if not player or not player.Parent then
+		return
+	end
+	local slotIndex = player:GetAttribute("HomeSlot")
+	if not slotIndex then
+		return
+	end
+	local slot = homeSlots[slotIndex]
+	if not slot or not slot.SpawnLocation then
+		return
+	end
+	if slot.OwnerUserId ~= player.UserId then
+		return
+	end
+	teleportToSlot(player, slot)
 end
 
 function HomeService:ReleaseHome(player)

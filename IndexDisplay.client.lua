@@ -3,8 +3,7 @@
 脚本类型: LocalScript
 脚本位置: StarterPlayer/StarterPlayerScripts/UI/IndexDisplay
 版本: V2.7
-职责: 手办索引界面显示与筛选
-]]
+职责: 手办索引界面显示与筛选]]
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -16,6 +15,7 @@ local playerGui = player:WaitForChild("PlayerGui")
 
 local configFolder = ReplicatedStorage:WaitForChild("Config")
 local FigurineConfig = require(configFolder:WaitForChild("FigurineConfig"))
+local QualityConfig = require(configFolder:WaitForChild("QualityConfig"))
 local modelRoot = ReplicatedStorage:WaitForChild("LBB")
 
 local mainGui = playerGui:WaitForChild("MainGui", 10)
@@ -24,10 +24,33 @@ if not mainGui then
 	return
 end
 
-local indexButton = mainGui:WaitForChild("Index", 10)
+local function resolveIndexButton()
+	local button = mainGui:FindFirstChild("Index")
+	if button and not button:IsA("GuiButton") then
+		local nested = button:FindFirstChildWhichIsA("GuiButton", true)
+		if nested then
+			button = nested
+		end
+	end
+	if button and button:IsA("GuiButton") then
+		return button
+	end
+	local descendant = mainGui:FindFirstChild("Index", true)
+	if descendant then
+		if descendant:IsA("GuiButton") then
+			return descendant
+		end
+		local nested = descendant:FindFirstChildWhichIsA("GuiButton", true)
+		if nested then
+			return nested
+		end
+	end
+	return nil
+end
+
+local indexButton = resolveIndexButton()
 if not indexButton then
 	warn("[IndexDisplay] MainGui.Index not found")
-	return
 end
 
 local indexGui = playerGui:WaitForChild("Index", 10)
@@ -100,12 +123,13 @@ end
 
 local currentNumLabel = infoBg:FindFirstChild("CurrentNum", true)
 local totalNumLabel = infoBg:FindFirstChild("TotalNum", true)
+local currentIcon = infoBg:FindFirstChild("CurrentIcon", true)
 
 template.Visible = false
-if indexGui:IsA("ScreenGui") then
+if indexGui:IsA("LayerCollector") then
 	indexGui.Enabled = true
 end
-if checkGui and checkGui:IsA("ScreenGui") then
+if checkGui and checkGui:IsA("LayerCollector") then
 	checkGui.Enabled = true
 end
 if checkBg then
@@ -123,6 +147,8 @@ local openIndex
 local closeIndex
 local openCheck
 local closeCheck
+local indexBound = false
+
 
 local checkOpen = false
 local lastCanvasPosition = nil
@@ -136,6 +162,8 @@ local currentYaw = 0
 local currentPitch = 0
 
 local dragActive = false
+local hoverActive = false
+local hoverLastPos = nil
 local dragInput = nil
 local dragStartPos = nil
 local dragStartYaw = 0
@@ -143,6 +171,33 @@ local dragStartPitch = 0
 local maxRotation = math.rad(30)
 local rotationSpeed = 0.005
 local inputBound = false
+
+local qualityIndicatorNames = {
+	[1] = "Leaf",
+	[2] = "Water",
+	[3] = "Lunar",
+	[4] = "Solar",
+	[5] = "Flame",
+	[6] = "Heart",
+	[7] = "Celestial",
+}
+
+local qualityIndicatorLookup = {}
+for _, name in pairs(qualityIndicatorNames) do
+	qualityIndicatorLookup[name] = true
+end
+
+local function updateQualityIndicators(container, quality)
+	if not container then
+		return
+	end
+	local targetName = qualityIndicatorNames[tonumber(quality) or 0]
+	for _, descendant in ipairs(container:GetDescendants()) do
+		if descendant:IsA("GuiObject") and qualityIndicatorLookup[descendant.Name] then
+			descendant.Visible = targetName ~= nil and descendant.Name == targetName
+		end
+	end
+end
 
 local function setCoreBackpackEnabled(enabled)
 	local ok, err = pcall(function()
@@ -174,12 +229,15 @@ local function setBackpackVisibility(isIndexOpen)
 
 	local backpackGui = playerGui:FindFirstChild("BackpackGui")
 	if isIndexOpen then
+		if backpackGui then
+			backpackGui:SetAttribute("BackpackForceHidden", true)
+		end
 		if counter.Value == 0 then
 			local corePrev = getCoreBackpackEnabled()
 			if type(corePrev) == "boolean" then
 				playerGui:SetAttribute("BackpackHideCorePrev", corePrev)
 			end
-			if backpackGui and backpackGui:IsA("ScreenGui") then
+			if backpackGui and backpackGui:IsA("LayerCollector") then
 				playerGui:SetAttribute("BackpackHideGuiPrev", backpackGui.Enabled)
 				backpackGui.Enabled = false
 			end
@@ -196,13 +254,16 @@ local function setBackpackVisibility(isIndexOpen)
 			if type(corePrev) == "boolean" then
 				setCoreBackpackEnabled(corePrev)
 			end
-			if backpackGui and backpackGui:IsA("ScreenGui") then
+			if backpackGui and backpackGui:IsA("LayerCollector") then
 				local guiPrev = playerGui:GetAttribute("BackpackHideGuiPrev")
 				if type(guiPrev) == "boolean" then
 					backpackGui.Enabled = guiPrev
 				else
 					backpackGui.Enabled = true
 				end
+			end
+			if backpackGui then
+				backpackGui:SetAttribute("BackpackForceHidden", false)
 			end
 			playerGui:SetAttribute("BackpackHideCorePrev", nil)
 			playerGui:SetAttribute("BackpackHideGuiPrev", nil)
@@ -251,6 +312,28 @@ local function setModelCFrame(model, cframe)
 		model:PivotTo(cframe)
 	elseif model:IsA("BasePart") then
 		model.CFrame = cframe
+	end
+end
+
+local function applyIconToInstance(instance, icon)
+	if instance:IsA("Decal") or instance:IsA("Texture") then
+		instance.Texture = icon
+	elseif instance:IsA("SurfaceAppearance") then
+		instance.ColorMap = icon
+	elseif instance:IsA("MeshPart") then
+		instance.TextureID = icon
+	elseif instance:IsA("SpecialMesh") then
+		instance.TextureId = icon
+	end
+end
+
+local function applyFigurineIcon(model, icon)
+	if not model or type(icon) ~= "string" or icon == "" then
+		return
+	end
+	applyIconToInstance(model, icon)
+	for _, obj in ipairs(model:GetDescendants()) do
+		applyIconToInstance(obj, icon)
 	end
 end
 
@@ -332,6 +415,24 @@ local function loadCheckModel(figurineId)
 	end
 
 	local model = source:Clone()
+	if model:IsA("Model") then
+		local found = model:FindFirstChild("PartLbb", true)
+		if found and found:IsA("BasePart") then
+			local onlyPart = found:Clone()
+			model:Destroy()
+			model = onlyPart
+		end
+	elseif model:IsA("BasePart") then
+		if model.Name ~= "PartLbb" then
+			local found = model:FindFirstChild("PartLbb", true)
+			if found and found:IsA("BasePart") then
+				local onlyPart = found:Clone()
+				model:Destroy()
+				model = onlyPart
+			end
+		end
+	end
+	applyFigurineIcon(model, info.Icon)
 	setAnchored(model, true)
 	if model:IsA("Model") then
 		local bboxCFrame = model:GetBoundingBox()
@@ -361,6 +462,8 @@ local function bindViewportInput()
 		return
 	end
 	inputBound = true
+
+	local useHoverRotation = UserInputService.MouseEnabled and not UserInputService.TouchEnabled
 
 	local function isPointerInsideViewport(position)
 		if not checkViewport then
@@ -412,6 +515,29 @@ local function bindViewportInput()
 	end)
 
 	UserInputService.InputChanged:Connect(function(input)
+		if not checkOpen then
+			return
+		end
+
+		if useHoverRotation and input.UserInputType == Enum.UserInputType.MouseMovement then
+			if not isPointerInsideViewport(input.Position) then
+				hoverActive = false
+				hoverLastPos = nil
+				return
+			end
+			if not hoverActive or not hoverLastPos then
+				hoverActive = true
+				hoverLastPos = input.Position
+				return
+			end
+			local delta = input.Position - hoverLastPos
+			hoverLastPos = input.Position
+			currentYaw = math.clamp(currentYaw + delta.X * rotationSpeed, -maxRotation, maxRotation)
+			currentPitch = math.clamp(currentPitch - delta.Y * rotationSpeed, -maxRotation, maxRotation)
+			updateViewportRotation()
+			return
+		end
+
 		if not dragActive then
 			return
 		end
@@ -489,6 +615,8 @@ local function buildEntries()
 		if nameLabel and nameLabel:IsA("TextLabel") then
 			nameLabel.Text = info.Name or tostring(info.Id)
 		end
+
+		updateQualityIndicators(clone, info.Quality)
 
 		local questionMark = clone:FindFirstChild("QuestionMark", true)
 		if questionMark and questionMark:IsA("GuiObject") then
@@ -573,9 +701,26 @@ local function applyFilter()
 	updateCounters()
 end
 
+local function updateQualityIcon(quality)
+	if not currentIcon then
+		return
+	end
+	if not (currentIcon:IsA("ImageLabel") or currentIcon:IsA("ImageButton")) then
+		return
+	end
+	local icon = ""
+	if QualityConfig and type(QualityConfig.GetIcon) == "function" then
+		icon = QualityConfig.GetIcon(quality)
+	elseif QualityConfig and type(QualityConfig.Icons) == "table" then
+		icon = QualityConfig.Icons[tonumber(quality) or 0] or ""
+	end
+	currentIcon.Image = icon or ""
+end
+
 local function setQuality(quality)
 	currentQuality = quality
 	applyFilter()
+	updateQualityIcon(quality)
 end
 
 openIndex = function(restoreScroll, forceBackpack)
@@ -589,6 +734,7 @@ openIndex = function(restoreScroll, forceBackpack)
 	end
 	applyFilter()
 	updateCounters()
+	updateQualityIcon(currentQuality)
 	if restoreScroll and lastCanvasPosition then
 		listFrame.CanvasPosition = lastCanvasPosition
 	end
@@ -606,6 +752,16 @@ local function connectButton(button, callback)
 		return
 	end
 	button.Activated:Connect(callback)
+end
+
+local function bindIndexButton(button)
+	if indexBound or not button or not button:IsA("GuiButton") then
+		return
+	end
+	indexBound = true
+	connectButton(button, function()
+		openIndex(false)
+	end)
 end
 
 openCheck = function(figurineId)
@@ -630,6 +786,8 @@ openCheck = function(figurineId)
 	checkOpen = true
 	dragActive = false
 	dragInput = nil
+	hoverActive = false
+	hoverLastPos = nil
 	bindViewportInput()
 	loadCheckModel(figurineId)
 end
@@ -642,6 +800,8 @@ closeCheck = function()
 	checkOpen = false
 	dragActive = false
 	dragInput = nil
+	hoverActive = false
+	hoverLastPos = nil
 	clearViewport()
 	setBackpackVisibility(false)
 	openIndex(true)
@@ -744,9 +904,19 @@ player.ChildAdded:Connect(function(child)
 	end
 end)
 
-connectButton(indexButton, function()
-	openIndex(false)
-end)
+bindIndexButton(indexButton)
+if not indexBound then
+	mainGui.DescendantAdded:Connect(function(child)
+		if indexBound or child.Name ~= "Index" then
+			return
+		end
+		local button = child
+		if not button:IsA("GuiButton") then
+			button = child:FindFirstChildWhichIsA("GuiButton", true)
+		end
+		bindIndexButton(button)
+	end)
+end
 
 connectButton(closeButton, function()
 	closeIndex()

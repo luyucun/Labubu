@@ -15,6 +15,62 @@
 
 local FormatHelper = {}
 
+local BASIC_SUFFIXES = { "K", "M", "B", "T" }
+
+local function toAlphabetSuffix(index)
+	local length = 2
+	local remaining = index
+	local max = 26 ^ length
+	while remaining >= max do
+		remaining = remaining - max
+		length += 1
+		max = 26 ^ length
+	end
+	local chars = {}
+	for i = length, 1, -1 do
+		local rem = remaining % 26
+		chars[i] = string.char(65 + rem)
+		remaining = math.floor(remaining / 26)
+	end
+	return table.concat(chars)
+end
+
+local function getSuffixByGroup(groupIndex)
+	if groupIndex <= #BASIC_SUFFIXES then
+		return BASIC_SUFFIXES[groupIndex]
+	end
+	local alphaIndex = groupIndex - #BASIC_SUFFIXES - 1
+	return toAlphabetSuffix(alphaIndex)
+end
+
+local function formatShortNumber(amount, minCompact)
+	if amount < minCompact then
+		return tostring(math.floor(amount))
+	end
+
+	local groupIndex = math.floor(math.log10(amount) / 3)
+	if groupIndex < 1 then
+		groupIndex = 1
+	end
+
+	local divisor = 10 ^ (groupIndex * 3)
+	local shortened = amount / divisor
+	local suffix = getSuffixByGroup(groupIndex)
+
+	local decimals
+	if shortened >= 100 then
+		decimals = 0
+	elseif shortened >= 10 then
+		decimals = 1
+	else
+		decimals = 2
+	end
+
+	local result = string.format("%." .. decimals .. "f%s", shortened, suffix)
+	result = result:gsub("%.?0+([A-Z]+)$", "%1")
+	return result
+end
+
 -- ==================== 金币格式化 ====================
 
 --[[
@@ -56,40 +112,7 @@ function FormatHelper.FormatCoinsShort(amount, showDollarSign)
 		amount = 0
 	end
 
-	local result
-
-	if amount >= 1e9 then
-		local shortened = amount / 1e9
-		if shortened >= 100 then
-			result = string.format("%.0fB", shortened)
-		elseif shortened >= 10 then
-			result = string.format("%.1fB", shortened)
-		else
-			result = string.format("%.2fB", shortened)
-		end
-	elseif amount >= 1e6 then
-		local shortened = amount / 1e6
-		if shortened >= 100 then
-			result = string.format("%.0fM", shortened)
-		elseif shortened >= 10 then
-			result = string.format("%.1fM", shortened)
-		else
-			result = string.format("%.2fM", shortened)
-		end
-	elseif amount >= 1e4 then
-		local shortened = amount / 1e3
-		if shortened >= 100 then
-			result = string.format("%.0fK", shortened)
-		elseif shortened >= 10 then
-			result = string.format("%.1fK", shortened)
-		else
-			result = string.format("%.2fK", shortened)
-		end
-	else
-		result = tostring(math.floor(amount))
-	end
-
-	result = result:gsub("%.?0+([KMBT])$", "%1")
+	local result = formatShortNumber(amount, 1e4)
 
 	if showDollarSign then
 		return "$" .. result
@@ -136,21 +159,7 @@ function FormatHelper.FormatNumberShort(number)
 		number = 0
 	end
 
-	local abbreviations = {
-		{ value = 1e12, suffix = "T" },
-		{ value = 1e9, suffix = "B" },
-		{ value = 1e6, suffix = "M" },
-		{ value = 1e3, suffix = "K" },
-	}
-
-	for _, abbr in ipairs(abbreviations) do
-		if number >= abbr.value then
-			local shortened = number / abbr.value
-			return string.format("%.1f%s", shortened, abbr.suffix)
-		end
-	end
-
-	return tostring(math.floor(number))
+	return formatShortNumber(number, 1e3)
 end
 
 -- ==================== 时间格式化 ====================

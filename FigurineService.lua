@@ -1,9 +1,9 @@
 --[[
-脚本名称: FigurineService
-脚本类型: ModuleScript
-脚本位置: ServerScriptService/Server/FigurineService
-版本: V2.0
-职责: 手办抽取/摆放/待领取产币/信息展示/升级表现
+鑴氭湰鍚嶇О: FigurineService
+鑴氭湰绫诲瀷: ModuleScript
+鑴氭湰浣嶇疆: ServerScriptService/Server/FigurineService
+鐗堟湰: V2.0
+鑱岃矗: 鎵嬪姙鎶藉彇/鎽嗘斁/寰呴鍙栦骇甯?淇℃伅灞曠ず/鍗囩骇琛ㄧ幇
 ]]
 
 local Players = game:GetService("Players")
@@ -918,6 +918,59 @@ function FigurineService:CollectCoins(player, figurineId)
 	return pending
 end
 
+function FigurineService:GetTotalPendingCoins(player)
+	local figurines = DataService:GetFigurines(player)
+	if type(figurines) ~= "table" then
+		return 0
+	end
+	local total = 0
+	for figurineId, owned in pairs(figurines) do
+		if owned then
+			local info = FigurineConfig.GetById(tonumber(figurineId) or figurineId)
+			if info then
+				local rate = getFigurineRate(player, info)
+				local pending = getPendingCoins(player, figurineId, rate)
+				if pending > 0 then
+					total += pending
+				end
+			end
+		end
+	end
+	return total
+end
+
+function FigurineService:CollectAllCoins(player, multiplier)
+	local figurines = DataService:GetFigurines(player)
+	if type(figurines) ~= "table" then
+		return 0
+	end
+	multiplier = tonumber(multiplier) or 1
+	if multiplier < 1 then
+		multiplier = 1
+	end
+	local total = 0
+	local now = os.time()
+	for figurineId, owned in pairs(figurines) do
+		if owned then
+			local info = FigurineConfig.GetById(tonumber(figurineId) or figurineId)
+			if info then
+				local rate = getFigurineRate(player, info)
+				local pending = getPendingCoins(player, figurineId, rate)
+				if pending > 0 then
+					total += pending
+					DataService:SetFigurineLastCollectTime(player, figurineId, now)
+				end
+			end
+		end
+	end
+	local grant = total * multiplier
+	if grant > 0 then
+		DataService:AddCoins(player, grant)
+	end
+	return grant
+end
+
+
 function FigurineService:BindPlayer(player)
 	local data = DataService:GetData(player)
 	if not data then
@@ -981,7 +1034,7 @@ function FigurineService:UnbindPlayer(player)
 	end
 end
 
-function FigurineService:GrantFromCapsule(player, capsuleInfo)
+function FigurineService:GrantFromCapsule(player, capsuleInfo, presentDelaySeconds)
 	if not capsuleInfo or not capsuleInfo.PoolId then
 		warn("[FigurineService] Capsule missing PoolId")
 		return nil, false
@@ -1002,10 +1055,21 @@ function FigurineService:GrantFromCapsule(player, capsuleInfo)
 	local result = DataService:AddFigurine(player, figurineId, capsuleInfo.Rarity)
 	local added = result and result.IsNew
 	if added then
-		placeFigurineModel(player, figurineInfo)
-		setupShowcasePlatform(player, figurineInfo, true)
-		bindClaimButton(player, figurineInfo)
-		triggerCameraFocus(player, figurineId)
+		local function present()
+			if not player or not player.Parent then
+				return
+			end
+			placeFigurineModel(player, figurineInfo)
+			setupShowcasePlatform(player, figurineInfo, true)
+			bindClaimButton(player, figurineInfo)
+			triggerCameraFocus(player, figurineId)
+		end
+		local delaySeconds = tonumber(presentDelaySeconds) or 0
+		if delaySeconds > 0 then
+			task.delay(delaySeconds, present)
+		else
+			present()
+		end
 	elseif result then
 		local state = getPlayerState(player)
 		local entry = state.UiEntries[figurineId]
@@ -1013,7 +1077,7 @@ function FigurineService:GrantFromCapsule(player, capsuleInfo)
 		updateMoneyLabel(player, figurineId, entry)
 	end
 
-	return figurineInfo, added
+	return figurineInfo, result
 end
 
 return FigurineService

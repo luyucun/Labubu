@@ -67,6 +67,37 @@ local highlightStrokeColor = Color3.fromRGB(255, 255, 0)
 template.Visible = false
 backpackFrame.Visible = false
 
+local hotkeyIndexMap = {
+	[Enum.KeyCode.One] = 1,
+	[Enum.KeyCode.Two] = 2,
+	[Enum.KeyCode.Three] = 3,
+	[Enum.KeyCode.Four] = 4,
+	[Enum.KeyCode.Five] = 5,
+	[Enum.KeyCode.Six] = 6,
+	[Enum.KeyCode.Seven] = 7,
+	[Enum.KeyCode.Eight] = 8,
+	[Enum.KeyCode.Nine] = 9,
+	[Enum.KeyCode.Zero] = 10,
+	[Enum.KeyCode.KeypadOne] = 1,
+	[Enum.KeyCode.KeypadTwo] = 2,
+	[Enum.KeyCode.KeypadThree] = 3,
+	[Enum.KeyCode.KeypadFour] = 4,
+	[Enum.KeyCode.KeypadFive] = 5,
+	[Enum.KeyCode.KeypadSix] = 6,
+	[Enum.KeyCode.KeypadSeven] = 7,
+	[Enum.KeyCode.KeypadEight] = 8,
+	[Enum.KeyCode.KeypadNine] = 9,
+	[Enum.KeyCode.KeypadZero] = 10,
+}
+
+local rarityNames = {
+	[1] = "Common",
+	[2] = "Light",
+	[3] = "Gold",
+	[4] = "Diamond",
+	[5] = "Rainbow",
+}
+
 local function getCapsuleInfo(capsuleId)
 	local normalizedId = tonumber(capsuleId) or capsuleId
 	if type(CapsuleConfig.GetById) == "function" then
@@ -141,6 +172,7 @@ local refresh
 local requestRefresh
 
 local refreshQueued = false
+local cachedEntries = {}
 requestRefresh = function()
 	if refreshQueued then
 		return
@@ -152,6 +184,8 @@ requestRefresh = function()
 		refresh()
 	end)
 end
+
+backpackGui:GetAttributeChangedSignal("BackpackForceHidden"):Connect(requestRefresh)
 
 local toolConnections = {}
 local backpackConnections = {}
@@ -298,7 +332,7 @@ local function equipCapsuleById(capsuleId)
 	requestRefresh()
 end
 
-local function getEquippedCapsuleTool()
+local function getEquippedCapsuleId()
 	if not currentCharacter then
 		return nil
 	end
@@ -306,41 +340,35 @@ local function getEquippedCapsuleTool()
 		if child:IsA("Tool") then
 			local capsuleId = getCapsuleId(child)
 			if capsuleId then
-				return child
+				return capsuleId
 			end
 		end
 	end
 	return nil
 end
 
-local function getEquippedCapsuleId()
-	local tool = getEquippedCapsuleTool()
-	if not tool then
-		return nil
+local function handleClickPosition(pos, inputType)
+	if not backpackFrame.Visible then
+		return
 	end
-	return getCapsuleId(tool)
-end
-
-local function isUiHit(pos)
 	local hitObjects = playerGui:GetGuiObjectsAtPosition(pos.X, pos.Y)
 	for _, gui in ipairs(hitObjects) do
-		if gui:IsA("TextBox") then
-			return true
-		end
-		if gui:IsA("GuiButton") then
-			return true
-		end
-		if gui:IsA("GuiObject") and gui.Visible and gui.Active then
-			return true
+		local capsuleId = gui:GetAttribute("CapsuleId")
+		if capsuleId then
+			if inputType == Enum.UserInputType.MouseButton1
+				or inputType == Enum.UserInputType.Touch then
+				equipCapsuleById(capsuleId)
+			end
+			return
 		end
 	end
-	return false
-end
 
-local function activateEquippedCapsuleTool()
-	local tool = getEquippedCapsuleTool()
-	if tool then
-		tool:Activate()
+	if inputType == Enum.UserInputType.MouseButton2 then
+		local humanoid = currentCharacter and currentCharacter:FindFirstChildOfClass("Humanoid")
+		if humanoid then
+			humanoid:UnequipTools()
+			requestRefresh()
+		end
 	end
 end
 
@@ -371,7 +399,9 @@ end
 
 refresh = function()
 	local entries, totalCount = buildInventory()
-	backpackFrame.Visible = totalCount > 0
+	cachedEntries = entries
+	local forceHidden = backpackGui:GetAttribute("BackpackForceHidden") == true
+	backpackFrame.Visible = (not forceHidden) and totalCount > 0
 	clearEntries()
 	local selectedId = getEquippedCapsuleId()
 
@@ -380,6 +410,8 @@ refresh = function()
 		clone.Name = string.format("Capsule_%s", tostring(entry.Id))
 		clone.Visible = true
 		clone:SetAttribute("CapsuleId", entry.Id)
+		local info = getCapsuleInfo(entry.Id)
+		local rarity = tonumber(info and info.Rarity) or 1
 		local layoutOrder = entry.Order
 		if layoutOrder == nil then
 			layoutOrder = tonumber(entry.Id) or 0
@@ -399,9 +431,18 @@ refresh = function()
 
 		local icon = clone:FindFirstChild("Icon", true)
 		if icon and (icon:IsA("ImageLabel") or icon:IsA("ImageButton")) then
-			local info = getCapsuleInfo(entry.Id)
 			icon.Image = info and info.Icon or ""
 			icon:SetAttribute("CapsuleId", entry.Id)
+		end
+
+		local rareLabel = clone:FindFirstChild("Rare", true)
+		if rareLabel and rareLabel:IsA("TextLabel") then
+			if rarity <= 1 then
+				rareLabel.Visible = false
+			else
+				rareLabel.Visible = true
+				rareLabel.Text = rarityNames[rarity] or tostring(rarity)
+			end
 		end
 
 		local numberLabel = clone:FindFirstChild("Number", true)
@@ -425,25 +466,44 @@ refresh = function()
 		clone.Parent = itemListFrame
 	end
 
-	if not _G.BackpackDisplayGlobalInputAdded then
-		_G.BackpackDisplayGlobalInputAdded = true
-		UserInputService.InputBegan:Connect(function(input)
+	if not itemListFrame:GetAttribute("InputListenerAdded") then
+		itemListFrame:SetAttribute("InputListenerAdded", true)
+		itemListFrame.InputBegan:Connect(function(input)
 			if input.UserInputType == Enum.UserInputType.MouseButton1
 				or input.UserInputType == Enum.UserInputType.MouseButton2
 				or input.UserInputType == Enum.UserInputType.Touch then
-				local hitUi = isUiHit(input.Position)
-				if hitUi then
+				handleClickPosition(input.Position, input.UserInputType)
+			end
+		end)
+	end
+
+	if not _G.BackpackDisplayGlobalInputAdded then
+		_G.BackpackDisplayGlobalInputAdded = true
+		UserInputService.InputBegan:Connect(function(input, gameProcessed)
+			if gameProcessed then
+				return
+			end
+			if input.UserInputType == Enum.UserInputType.Keyboard then
+				if UserInputService:GetFocusedTextBox() then
 					return
 				end
-				if input.UserInputType == Enum.UserInputType.MouseButton2 then
-					local humanoid = currentCharacter and currentCharacter:FindFirstChildOfClass("Humanoid")
-					if humanoid then
-						humanoid:UnequipTools()
-						requestRefresh()
+				local index = hotkeyIndexMap[input.KeyCode]
+				if index then
+					local entry = cachedEntries[index]
+					if not entry then
+						local entries = buildInventory()
+						entry = entries[index]
+					end
+					if entry and entry.Id then
+						equipCapsuleById(entry.Id)
 					end
 					return
 				end
-				activateEquippedCapsuleTool()
+			end
+			if input.UserInputType == Enum.UserInputType.MouseButton1
+				or input.UserInputType == Enum.UserInputType.MouseButton2
+				or input.UserInputType == Enum.UserInputType.Touch then
+				handleClickPosition(input.Position, input.UserInputType)
 			end
 		end)
 	end

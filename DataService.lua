@@ -1,4 +1,4 @@
-﻿--[[
+--[[
 脚本名称: DataService
 脚本类型: ModuleScript
 脚本位置: ServerScriptService/Server/DataService
@@ -34,6 +34,7 @@ local function defaultData()
 		CapsuleOpenTotal = 0,
 		CapsuleOpenById = {},
 		OutputSpeed = 0,
+		AutoCollect = false,
 	}
 end
 
@@ -327,6 +328,7 @@ local function applyStatsAttributes(player, data)
 	player:SetAttribute("TotalPlayTime", normalizeCount(data.TotalPlayTime))
 	player:SetAttribute("CapsuleOpenTotal", normalizeCount(data.CapsuleOpenTotal))
 	player:SetAttribute("OutputSpeed", normalizeOutputSpeed(data.OutputSpeed))
+	player:SetAttribute("AutoCollect", data.AutoCollect == true)
 end
 
 local function ensureFigurineOwnedFolder(player)
@@ -451,6 +453,14 @@ function DataService:LoadPlayer(player)
 		needsSave = true
 	end
 
+	if data.AutoCollect == nil then
+		data.AutoCollect = false
+		needsSave = true
+	else
+		data.AutoCollect = data.AutoCollect == true
+	end
+
+
 	local normalizedPlaytime = normalizeCount(data.TotalPlayTime)
 	if data.TotalPlayTime ~= normalizedPlaytime then
 		data.TotalPlayTime = normalizedPlaytime
@@ -543,6 +553,24 @@ function DataService:GetPlacedEggs(player)
 	return record and record.Data.PlacedEggs or nil
 end
 
+function DataService:HasAutoCollect(player)
+	local record = sessionData[player.UserId]
+	return record and record.Data.AutoCollect == true
+end
+
+function DataService:SetAutoCollect(player, enabled)
+	local record = sessionData[player.UserId]
+	if not record then
+		return
+	end
+	record.Data.AutoCollect = enabled == true
+	record.Dirty = true
+	if player and player.Parent then
+		player:SetAttribute("AutoCollect", record.Data.AutoCollect)
+	end
+end
+
+
 function DataService:GenerateUid()
 	return HttpService:GenerateGUID(false)
 end
@@ -594,6 +622,7 @@ function DataService:AddFigurine(player, figurineId, capsuleRarity)
 		state.Level = 1
 		state.Exp = 0
 		state.Rarity = incomingRarity
+		state.LastCollectTime = os.time()
 	end
 
 	local rarityUpgraded = false
@@ -607,7 +636,7 @@ function DataService:AddFigurine(player, figurineId, capsuleRarity)
 		end
 	end
 
-	if state.LastCollectTime == nil then
+	if state.LastCollectTime == nil or tonumber(state.LastCollectTime) == nil or state.LastCollectTime <= 0 then
 		state.LastCollectTime = os.time()
 	end
 
@@ -656,7 +685,7 @@ function DataService:EnsureFigurineState(player, figurineId)
 		state = { LastCollectTime = os.time() }
 		record.Data.FigurineStates[id] = state
 		record.Dirty = true
-	elseif state.LastCollectTime == nil then
+	elseif state.LastCollectTime == nil or tonumber(state.LastCollectTime) == nil or state.LastCollectTime <= 0 then
 		state.LastCollectTime = os.time()
 		record.Dirty = true
 	end

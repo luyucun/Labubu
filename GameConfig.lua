@@ -18,6 +18,19 @@ local GameConfig = {
 	ConveyorMoveTime = 6,
 	CapsuleSpawnPoolId = 1,
 	FigurineCoinCapSeconds = 10800,
+	MaxPlacedCapsules = 12,
+	ClaimAllProductId = 3514031081,
+	ClaimAllTenProductId = 3514031237,
+	AutoCollectPassId = 1673138854,
+	AutoCollectInterval = 1,
+	AutoCollectDotInterval = 0.7,
+	GachaSlideInTime = 0.35,
+	GachaCoverHoldTime = 1,
+	GachaFlipTime = 0,
+	GachaResultHoldTime = 0.5,
+	GachaLevelUpTime = 0.5,
+	GachaSlideOutTime = 0.35,
+	CameraFocusDelay = 0.5,
 }
 
 return GameConfig
