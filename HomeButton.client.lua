@@ -11,14 +11,27 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
+local modules = ReplicatedStorage:WaitForChild("Modules")
+local GuiResolver = require(modules:WaitForChild("GuiResolver"))
 
-local mainGui = playerGui:WaitForChild("MainGui", 10)
+local mainGui = GuiResolver.WaitForLayer(playerGui, { "MainGui", "MainGUI", "Main", "MainUI" }, {
+	"CoinNum",
+	"CoinBuff",
+	"Bag",
+	"Index",
+	"Home",
+}, 30)
 if not mainGui then
 	warn("[HomeButton] MainGui not found")
-	return
 end
 
-local homeButton = mainGui:WaitForChild("Home", 10)
+local homeButton = nil
+if mainGui then
+	homeButton = GuiResolver.FindGuiButton(mainGui, "Home")
+end
+if not homeButton then
+	homeButton = GuiResolver.FindGuiButton(playerGui, "Home")
+end
 if not homeButton or not homeButton:IsA("GuiButton") then
 	warn("[HomeButton] MainGui.Home not found")
 	return

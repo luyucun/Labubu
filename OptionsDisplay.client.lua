@@ -14,6 +14,7 @@ local playerGui = player:WaitForChild("PlayerGui")
 
 local modulesFolder = ReplicatedStorage:WaitForChild("Modules")
 local AudioManager = require(modulesFolder:WaitForChild("AudioManager"))
+local GuiResolver = require(modulesFolder:WaitForChild("GuiResolver"))
 
 local COLOR_ON_START = Color3.fromRGB(0x55, 0xFF, 0x00)
 local COLOR_ON_END = Color3.fromRGB(0xFF, 0xFF, 0x00)
@@ -153,10 +154,12 @@ local function resolveToggle(bg, name)
 	}
 end
 
-local topRightGui = playerGui:FindFirstChild("TopRightGui")
-if not topRightGui then
-	topRightGui = playerGui:WaitForChild("TopRightGui", 10)
-end
+local topRightGui = GuiResolver.WaitForLayer(playerGui, { "TopRightGui", "TopRightGUI", "TopRight", "TopRightUI" }, {
+	"Options",
+	"Invite",
+	"Learderboard",
+	"Leaderboard",
+}, 30)
 if not topRightGui then
 	warn("[OptionsDisplay] TopRightGui not found")
 end
@@ -165,20 +168,17 @@ local optionsButton
 if topRightGui then
 	local topBg = topRightGui:FindFirstChild("Bg")
 	if topBg then
-		optionsButton = topBg:FindFirstChild("Options")
+		optionsButton = GuiResolver.FindGuiButton(topBg, "Options")
 	end
-	if optionsButton and not optionsButton:IsA("GuiButton") then
-		optionsButton = optionsButton:FindFirstChildWhichIsA("GuiButton", true)
-	end
-	if optionsButton and not optionsButton:IsA("GuiButton") then
-		optionsButton = nil
-	end
+end
+if not optionsButton then
+	optionsButton = GuiResolver.FindGuiButton(playerGui, "Options")
 end
 
-local optionsGui = playerGui:FindFirstChild("Options")
-if not optionsGui then
-	optionsGui = playerGui:WaitForChild("Options", 10)
-end
+local optionsGui = GuiResolver.WaitForLayer(playerGui, { "Options", "OptionsGui", "OptionsGUI" }, {
+	"Music",
+	"Sfx",
+}, 30)
 if not optionsGui then
 	warn("[OptionsDisplay] Options gui not found")
 end

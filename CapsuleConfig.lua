@@ -20,6 +20,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://107877804846649",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519967882,
 	},
 	{
 		Id = 1002,
@@ -32,6 +33,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://91134558890103",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519968035,
 	},
 	{
 		Id = 1003,
@@ -44,6 +46,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://121158065949906",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519968159,
 	},
 	{
 		Id = 1004,
@@ -56,6 +59,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://123720993696670",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519968449,
 	},
 	{
 		Id = 1005,
@@ -68,6 +72,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://95224550415811",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519968675,
 	},
 	{
 		Id = 1006,
@@ -80,6 +85,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://127841276677202",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519968812,
 	},
 	{
 		Id = 1007,
@@ -92,6 +98,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://120738172280657",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519968929,
 	},
 	{
 		Id = 2001,
@@ -104,6 +111,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://107877804846649",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519969700,
 	},
 	{
 		Id = 2002,
@@ -116,6 +124,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://91134558890103",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519969830,
 	},
 	{
 		Id = 2003,
@@ -128,6 +137,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://121158065949906",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519969998,
 	},
 	{
 		Id = 2004,
@@ -140,6 +150,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://123720993696670",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519970139,
 	},
 	{
 		Id = 2005,
@@ -152,6 +163,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://95224550415811",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519970259,
 	},
 	{
 		Id = 2006,
@@ -164,6 +176,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://127841276677202",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519970376,
 	},
 	{
 		Id = 2007,
@@ -176,6 +189,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://120738172280657",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519970446,
 	},
 	{
 		Id = 3001,
@@ -188,6 +202,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://107877804846649",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519971147,
 	},
 	{
 		Id = 3002,
@@ -200,6 +215,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://91134558890103",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519971264,
 	},
 	{
 		Id = 3003,
@@ -212,6 +228,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://121158065949906",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519971358,
 	},
 	{
 		Id = 3004,
@@ -224,6 +241,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://123720993696670",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519971507,
 	},
 	{
 		Id = 3005,
@@ -236,6 +254,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://95224550415811",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519971613,
 	},
 	{
 		Id = 3006,
@@ -248,6 +267,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://127841276677202",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519971705,
 	},
 	{
 		Id = 3007,
@@ -260,6 +280,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://120738172280657",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519971799,
 	},
 	{
 		Id = 4001,
@@ -272,6 +293,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://107877804846649",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519972281,
 	},
 	{
 		Id = 4002,
@@ -284,6 +306,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://91134558890103",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519972374,
 	},
 	{
 		Id = 4003,
@@ -296,6 +319,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://121158065949906",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519972453,
 	},
 	{
 		Id = 4004,
@@ -308,6 +332,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://123720993696670",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519972540,
 	},
 	{
 		Id = 4005,
@@ -320,6 +345,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://95224550415811",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519972656,
 	},
 	{
 		Id = 4006,
@@ -332,6 +358,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://127841276677202",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519972811,
 	},
 	{
 		Id = 4007,
@@ -344,6 +371,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://120738172280657",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519972915,
 	},
 	{
 		Id = 5001,
@@ -356,6 +384,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://107877804846649",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519973404,
 	},
 	{
 		Id = 5002,
@@ -368,6 +397,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://91134558890103",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519973516,
 	},
 	{
 		Id = 5003,
@@ -380,6 +410,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://121158065949906",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519973609,
 	},
 	{
 		Id = 5004,
@@ -392,6 +423,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://123720993696670",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519973732,
 	},
 	{
 		Id = 5005,
@@ -404,6 +436,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://95224550415811",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519973805,
 	},
 	{
 		Id = 5006,
@@ -416,6 +449,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://127841276677202",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519973900,
 	},
 	{
 		Id = 5007,
@@ -428,6 +462,7 @@ CapsuleConfig.Capsules = {
 		PoolId = 99001,
 		Icon = "rbxassetid://120738172280657",
 		DisplayImage = "rbxassetid://98616255072587",
+		DeveloperProductId = 3519973978,
 	},
 }
 

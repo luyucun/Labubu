@@ -24,8 +24,13 @@ local FigurineRateConfig = require(configFolder:WaitForChild("FigurineRateConfig
 local UpgradeConfig = require(configFolder:WaitForChild("UpgradeConfig"))
 local FormatHelper = require(modulesFolder:WaitForChild("FormatHelper"))
 local BackpackVisibility = require(modulesFolder:WaitForChild("BackpackVisibility"))
+local GuiResolver = require(modulesFolder:WaitForChild("GuiResolver"))
 
-local gachaGui = playerGui:WaitForChild("GachaResult", 10)
+local gachaGui = GuiResolver.WaitForLayer(playerGui, { "GachaResult", "GachaResultGui", "GachaResultGUI" }, {
+	"Result",
+	"Cover",
+	"LevelUp",
+}, 30)
 if not gachaGui then
 	warn("[GachaResult] GachaResult gui not found")
 	return
@@ -45,6 +50,8 @@ local resultName = resultFrame:FindFirstChild("Name", true)
 local resultRare = resultFrame:FindFirstChild("Rare", true)
 local resultSpeed = resultFrame:FindFirstChild("Speed", true)
 local resultNewTitle = resultFrame:FindFirstChild("NewTitle", true)
+local resultLightBg = resultFrame:FindFirstChild("LightBg", true)
+local gachaBg = gachaGui:FindFirstChild("Bg") or gachaGui:FindFirstChild("Bg", true)
 
 local levelUpIcon = levelUpFrame and levelUpFrame:FindFirstChild("Icon", true)
 local levelUpName = levelUpFrame and levelUpFrame:FindFirstChild("Name", true)
@@ -216,10 +223,47 @@ local function waitForAssetsPreloaded(timeoutSeconds)
 	return player:GetAttribute("AssetsPreloaded") == true
 end
 
+local function resolveModelResource(modelRoot, resource)
+	if not modelRoot or type(resource) ~= "string" or resource == "" then
+		return nil
+	end
+	local current = modelRoot
+	for _, segment in ipairs(string.split(resource, "/")) do
+		if segment ~= "" then
+			current = current:FindFirstChild(segment)
+			if not current then
+				return nil
+			end
+		end
+	end
+	return current
+end
+
+local function preloadFigurineModel(figurineInfo)
+	if not figurineInfo then
+		return
+	end
+	local modelRoot = ReplicatedStorage:FindFirstChild("LBB")
+	local resource = figurineInfo.ModelResource or figurineInfo.ModelName
+	local source = resolveModelResource(modelRoot, resource)
+	if not source then
+		return
+	end
+	local ok = pcall(function()
+		ContentProvider:PreloadAsync({ source })
+	end)
+	if not ok then
+		pcall(function()
+			ContentProvider:PreloadAsync(source:GetDescendants())
+		end)
+	end
+end
+
 local function preloadGachaAssets(capsuleInfo, figurineInfo)
 	if not capsuleInfo or not figurineInfo then
 		return
 	end
+	preloadFigurineModel(figurineInfo)
 	local targets = {}
 	local figurineIcon = figurineInfo.Icon or ""
 	if resultIcon and (resultIcon:IsA("ImageLabel") or resultIcon:IsA("ImageButton")) then
@@ -363,6 +407,7 @@ local gachaTimes = {
 }
 local coverShakeMagnitude = 6
 local coverShakeInterval = 0.05
+local LIGHT_BG_ROTATION_TIME = 2
 
 local activeToken = { Value = 0 }
 local activeTweens = {}
@@ -371,12 +416,48 @@ local function setBackpackHidden(hidden)
 	BackpackVisibility.SetHidden(playerGui, "GachaResult", hidden == true)
 end
 
+local function setGachaBgVisible(visible)
+	if gachaBg and gachaBg:IsA("GuiObject") then
+		gachaBg.Visible = visible == true
+	end
+end
+
+local lightBgTween
+local function stopLightBg()
+	if lightBgTween then
+		lightBgTween:Cancel()
+		lightBgTween = nil
+	end
+	if resultLightBg and resultLightBg:IsA("GuiObject") then
+		resultLightBg.Rotation = 0
+		resultLightBg.Visible = false
+	end
+end
+
+local function startLightBg()
+	if not resultLightBg or not resultLightBg:IsA("GuiObject") then
+		return
+	end
+	if lightBgTween then
+		lightBgTween:Cancel()
+		lightBgTween = nil
+	end
+	resultLightBg.Rotation = 0
+	resultLightBg.Visible = true
+	lightBgTween = TweenService:Create(resultLightBg, TweenInfo.new(LIGHT_BG_ROTATION_TIME, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, -1), {
+		Rotation = 360,
+	})
+	lightBgTween:Play()
+end
+
 local function cancelActive()
 	activeToken.Value += 1
 	for _, tween in ipairs(activeTweens) do
 		tween:Cancel()
 	end
 	table.clear(activeTweens)
+	stopLightBg()
+	setGachaBgVisible(false)
 	setBackpackHidden(false)
 	if baseLayoutResult then
 		restoreLayout(resultFrame, baseLayoutResult)
@@ -394,10 +475,38 @@ local function playSequence(payload)
 	cancelActive()
 	activeToken.Value += 1
 	local token = activeToken.Value
+	local layoutResult
+	local layoutLevel
+	local function finalize()
+		if token ~= activeToken.Value then
+			return
+		end
+		stopLightBg()
+		setGachaBgVisible(false)
+		if resultFrame then
+			resultFrame.Visible = false
+			if layoutResult then
+				restoreLayout(resultFrame, layoutResult)
+			elseif baseLayoutResult then
+				restoreLayout(resultFrame, baseLayoutResult)
+			end
+		end
+		if levelUpFrame then
+			levelUpFrame.Visible = false
+			if layoutLevel then
+				restoreLayout(levelUpFrame, layoutLevel)
+			elseif baseLayoutLevel then
+				restoreLayout(levelUpFrame, baseLayoutLevel)
+			end
+		end
+		setBackpackHidden(false)
+	end
+	local ok, err = xpcall(function()
 
 	if gachaGui:IsA("LayerCollector") then
 		gachaGui.Enabled = true
 	end
+	setGachaBgVisible(true)
 
 	local capsuleInfo = CapsuleConfig.GetById(payload.CapsuleId)
 	local figurineInfo = FigurineConfig.GetById(payload.FigurineId)
@@ -420,12 +529,12 @@ local function playSequence(payload)
 		return
 	end
 
-	local layoutResult = captureLayout(resultFrame)
+	layoutResult = captureLayout(resultFrame)
 	if not layoutResult then
 		setBackpackHidden(false)
 		return
 	end
-	local layoutLevel = levelUpFrame and captureLayout(levelUpFrame) or nil
+	layoutLevel = levelUpFrame and captureLayout(levelUpFrame) or nil
 
 	applyCenteredLayout(resultFrame, layoutResult)
 	if levelUpFrame and layoutLevel then
@@ -477,6 +586,7 @@ local function playSequence(payload)
 		return
 	end
 
+	startLightBg()
 	setVisible(resultCover, false)
 	updateQualityIndicators(resultFrame, figurineQuality)
 	setImage(resultIcon, figurineInfo.Icon)
@@ -537,6 +647,7 @@ local function playSequence(payload)
 		return
 	end
 
+	setGachaBgVisible(false)
 	resultFrame.Visible = false
 	if levelUpFrame then
 		levelUpFrame.Visible = false
@@ -546,6 +657,14 @@ local function playSequence(payload)
 		restoreLayout(levelUpFrame, layoutLevel)
 	end
 	setBackpackHidden(false)
+	end, debug.traceback)
+	if not ok then
+		warn(string.format("[GachaResult] playSequence failed: %s", tostring(err)))
+		if token == activeToken.Value then
+			cancelActive()
+		end
+	end
+	finalize()
 end
 
 local function ensureLabubuEvents()

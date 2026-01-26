@@ -7,6 +7,10 @@
 ]]
 
 local StarterGui = game:GetService("StarterGui")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local modulesFolder = ReplicatedStorage:WaitForChild("Modules")
+local GuiResolver = require(modulesFolder:WaitForChild("GuiResolver"))
 
 local BackpackVisibility = {}
 
@@ -53,7 +57,11 @@ local function computeHideCount(playerGui)
 end
 
 local function applyVisibility(playerGui, prevCount, newCount)
-	local backpackGui = playerGui:FindFirstChild("BackpackGui")
+	local backpackGui = GuiResolver.FindLayer(playerGui, { "BackpackGui", "BackpackGUI", "Backpack" }, {
+		"BackpackFrame",
+		"ItemListFrame",
+		"ArmyTemplate",
+	})
 	if newCount > 0 then
 		if backpackGui then
 			backpackGui:SetAttribute("BackpackForceHidden", true)
@@ -77,17 +85,12 @@ local function applyVisibility(playerGui, prevCount, newCount)
 			if type(corePrev) == "boolean" then
 				setCoreBackpackEnabled(corePrev)
 			end
-			if backpackGui and backpackGui:IsA("LayerCollector") then
-				local guiPrev = playerGui:GetAttribute("BackpackHideGuiPrev")
-				if type(guiPrev) == "boolean" then
-					backpackGui.Enabled = guiPrev
-				else
-					backpackGui.Enabled = true
-				end
-			end
-			playerGui:SetAttribute("BackpackHideCorePrev", nil)
-			playerGui:SetAttribute("BackpackHideGuiPrev", nil)
 		end
+		if backpackGui and backpackGui:IsA("LayerCollector") then
+			backpackGui.Enabled = true
+		end
+		playerGui:SetAttribute("BackpackHideCorePrev", nil)
+		playerGui:SetAttribute("BackpackHideGuiPrev", nil)
 		if backpackGui then
 			backpackGui:SetAttribute("BackpackForceHidden", false)
 		end

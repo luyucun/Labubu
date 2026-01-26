@@ -7,6 +7,7 @@
 ]]
 
 local Players = game:GetService("Players")
+local MarketplaceService = game:GetService("MarketplaceService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
@@ -25,6 +26,24 @@ EggService.__index = EggService
 local toolConnections = {} -- [tool] = connection
 local playerConnections = {} -- [player] = {Backpack, Character}
 local playerStackIndex = {} -- [userId] = number
+local paidOpenRequests = {} -- [userId] = {EggUid, ProductId}
+
+local PAID_PROMPT_ATTACHMENT = "CapsulePaidPrompt"
+local RARITY_LABELS = {
+	[2] = "Light",
+	[3] = "Gold",
+	[4] = "Diamond",
+	[5] = "Rainbow",
+}
+local QUALITY_NAME_COLORS = {
+	[1] = Color3.fromRGB(0, 255, 0),
+	[2] = Color3.fromRGB(0, 255, 255),
+	[3] = Color3.fromRGB(170, 0, 170),
+	[4] = Color3.fromRGB(255, 255, 0),
+	[5] = Color3.fromRGB(255, 0, 0),
+	[6] = Color3.fromRGB(255, 152, 220),
+	[7] = Color3.fromRGB(0, 255, 255),
+}
 
 local function ensureLabubuEvents()
 	local eventsFolder = ReplicatedStorage:FindFirstChild("Events")
@@ -302,6 +321,36 @@ local function getPlacedFolder(homeFolder)
 	return folder
 end
 
+local function findPlacedCapsuleByUid(player, eggUid)
+	if not player or not eggUid then
+		return nil
+	end
+	local homeFolder = getHomeFolder(player)
+	local placedFolder = getPlacedFolder(homeFolder)
+	if not placedFolder then
+		return nil
+	end
+	for _, child in ipairs(placedFolder:GetChildren()) do
+		if child:GetAttribute("EggUid") == eggUid then
+			return child
+		end
+	end
+	return nil
+end
+
+local function clearPaidOpenRequest(player, eggUid)
+	if not player then
+		return
+	end
+	local pending = paidOpenRequests[player.UserId]
+	if not pending then
+		return
+	end
+	if not eggUid or pending.EggUid == eggUid then
+		paidOpenRequests[player.UserId] = nil
+	end
+end
+
 local function getIdleFloor(homeFolder)
 	if not homeFolder then
 		return nil
@@ -397,6 +446,92 @@ local function getPrimaryPart(model)
 	return nil
 end
 
+local function getCapsuleInfoHeight(model, part)
+	if model and model:IsA("Model") then
+		return model:GetExtentsSize().Y
+	end
+	if part and part:IsA("BasePart") then
+		return part.Size.Y
+	end
+	return 0
+end
+
+local function applyCapsuleInfoBillboard(model, capsuleInfo)
+	if not model then
+		return
+	end
+	local info = type(capsuleInfo) == "table" and capsuleInfo or nil
+	local template = ReplicatedStorage:FindFirstChild("CapsuleInfo")
+	if not template or not template:IsA("BillboardGui") then
+		return
+	end
+	local primary = getPrimaryPart(model)
+	if not primary then
+		return
+	end
+	local existing = model:FindFirstChild("CapsuleInfo")
+	if existing and existing:IsA("BillboardGui") then
+		existing:Destroy()
+	end
+	local legacy = primary:FindFirstChild("CapsuleInfo")
+	if legacy and legacy:IsA("BillboardGui") then
+		legacy:Destroy()
+	end
+
+	local billboard = template:Clone()
+	billboard.Enabled = true
+	billboard.Adornee = primary
+	billboard.Parent = model
+	billboard.StudsOffsetWorldSpace = Vector3.new(0, 0, 0)
+	local baseOffset = billboard.StudsOffset
+	local height = getCapsuleInfoHeight(model, primary)
+	local scale = billboard:GetAttribute("OffsetScale")
+	if type(scale) ~= "number" then
+		scale = 0.6
+	end
+	local infoScale = model:GetAttribute("CapsuleInfoScale")
+	if type(infoScale) ~= "number" then
+		infoScale = 1
+	end
+	local extra = billboard:GetAttribute("OffsetY")
+	if type(extra) ~= "number" then
+		extra = 0
+	end
+	billboard.StudsOffset = Vector3.new(baseOffset.X, (height * scale + extra) * infoScale, baseOffset.Z)
+
+	local nameLabel = billboard:FindFirstChild("Name", true)
+	if nameLabel and nameLabel:IsA("TextLabel") then
+		nameLabel.Text = tostring((info and info.Name) or model:GetAttribute("CapsuleName") or model.Name)
+		local quality = tonumber(info and info.Quality) or tonumber(model:GetAttribute("Quality")) or 0
+		local color = QUALITY_NAME_COLORS[quality]
+		if color then
+			nameLabel.TextColor3 = color
+		end
+	end
+
+	local priceLabel = billboard:FindFirstChild("Price", true)
+	if priceLabel and priceLabel:IsA("TextLabel") then
+		local price = tonumber(info and info.Price) or tonumber(model:GetAttribute("Price")) or 0
+		priceLabel.Text = FormatHelper.FormatCoinsShort(price, true)
+	end
+
+	for _, labelName in ipairs({ "Light", "Gold", "Diamond", "Rainbow" }) do
+		local label = billboard:FindFirstChild(labelName, true)
+		if label and label:IsA("GuiObject") then
+			label.Visible = false
+		end
+	end
+
+	local rarity = tonumber(info and info.Rarity) or tonumber(model:GetAttribute("Rarity")) or 1
+	local targetName = RARITY_LABELS[rarity]
+	if targetName then
+		local label = billboard:FindFirstChild(targetName, true)
+		if label and label:IsA("GuiObject") then
+			label.Visible = true
+		end
+	end
+end
+
 local function getCapsuleInfo(capsuleId)
 	local normalizedId = tonumber(capsuleId) or capsuleId
 	if type(CapsuleConfig.GetById) == "function" then
@@ -420,6 +555,15 @@ local function getCapsuleInfo(capsuleId)
 	return nil
 end
 
+function EggService:RefreshCapsuleInfo(model)
+	if not model then
+		return
+	end
+	local capsuleId = model:GetAttribute("CapsuleId")
+	local capsuleInfo = capsuleId and getCapsuleInfo(capsuleId) or nil
+	applyCapsuleInfoBillboard(model, capsuleInfo)
+end
+
 local function getPromptHeight(model, part)
 	if model and model:IsA("Model") then
 		return model:GetExtentsSize().Y
@@ -434,7 +578,7 @@ local function createPrompt(model, part, price)
 	local prompt = Instance.new("ProximityPrompt")
 	prompt.ActionText = "Buy"
 	prompt.ObjectText = FormatHelper.FormatCoinsShort(price, true)
-	prompt.HoldDuration = 0.1
+	prompt.HoldDuration = 0
 	prompt.MaxActivationDistance = 20
 	prompt.RequiresLineOfSight = false
 
@@ -462,6 +606,88 @@ local function createOpenPrompt(model, part)
 
 	prompt.Parent = attachment
 	return prompt
+end
+
+local function createPaidOpenPrompt(model, part)
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.ActionText = "Open"
+	prompt.ObjectText = "Skip"
+	prompt.HoldDuration = 0
+	prompt.MaxActivationDistance = 20
+	prompt.RequiresLineOfSight = false
+
+	local attachment = Instance.new("Attachment")
+	attachment.Name = PAID_PROMPT_ATTACHMENT
+	attachment.Position = Vector3.new(0, getPromptHeight(model, part) * 0.6, 0)
+	attachment.Parent = part
+
+	prompt.Parent = attachment
+	return prompt
+end
+
+local function removePromptAttachment(model, name)
+	if not model or not name then
+		return
+	end
+	local attachment = model:FindFirstChild(name, true)
+	if attachment then
+		attachment:Destroy()
+	end
+end
+
+local function isHatchReady(model)
+	if not model then
+		return false
+	end
+	if model:GetAttribute("HatchReady") == true then
+		return true
+	end
+	local endTime = tonumber(model:GetAttribute("HatchEndTime"))
+	if endTime and os.time() >= endTime then
+		return true
+	end
+	return false
+end
+
+local function ensureOpenPrompt(model)
+	local openPart = getPrimaryPart(model)
+	if not openPart then
+		return
+	end
+	if openPart:FindFirstChild("CapsuleOpenPrompt") then
+		return
+	end
+	local prompt = createOpenPrompt(model, openPart)
+	prompt.Triggered:Connect(function(openPlayer)
+		EggService:HandleOpen(openPlayer, model)
+	end)
+end
+
+local function ensurePaidOpenPrompt(model)
+	local openPart = getPrimaryPart(model)
+	if not openPart then
+		return
+	end
+	if openPart:FindFirstChild(PAID_PROMPT_ATTACHMENT) then
+		return
+	end
+	local productId = tonumber(model:GetAttribute("DeveloperProductId"))
+	if not productId then
+		return
+	end
+	local prompt = createPaidOpenPrompt(model, openPart)
+	prompt.Triggered:Connect(function(openPlayer)
+		EggService:HandlePaidOpenPrompt(openPlayer, model)
+	end)
+end
+
+local function setHatchReady(model)
+	if not model or not model.Parent then
+		return
+	end
+	model:SetAttribute("HatchReady", true)
+	removePromptAttachment(model, PAID_PROMPT_ATTACHMENT)
+	ensureOpenPrompt(model)
 end
 
 local function formatCountdownText(seconds)
@@ -554,16 +780,7 @@ local function setupHatchTimer(model, hatchEndTime)
 	attachOpenProgress(model, endTime)
 
 	local function markReady()
-		if model and model.Parent then
-			model:SetAttribute("HatchReady", true)
-			local openPart = getPrimaryPart(model)
-			if openPart then
-				local openPrompt = createOpenPrompt(model, openPart)
-				openPrompt.Triggered:Connect(function(openPlayer)
-					EggService:HandleOpen(openPlayer, model)
-				end)
-			end
-		end
+		setHatchReady(model)
 	end
 
 	if remaining <= 0 then
@@ -572,6 +789,8 @@ local function setupHatchTimer(model, hatchEndTime)
 	end
 
 	model:SetAttribute("HatchReady", false)
+	removePromptAttachment(model, "CapsuleOpenPrompt")
+	ensurePaidOpenPrompt(model)
 	task.delay(remaining, markReady)
 end
 
@@ -591,6 +810,7 @@ function EggService:CreateConveyorCapsule(capsuleInfo, ownerUserId)
 	model:SetAttribute("Rarity", capsuleInfo.Rarity)
 	model:SetAttribute("Price", capsuleInfo.Price)
 	model:SetAttribute("OpenSeconds", capsuleInfo.OpenSeconds)
+	model:SetAttribute("DeveloperProductId", capsuleInfo.DeveloperProductId)
 	model:SetAttribute("OwnerUserId", ownerUserId)
 
 	local primary = getPrimaryPart(model)
@@ -603,6 +823,17 @@ function EggService:CreateConveyorCapsule(capsuleInfo, ownerUserId)
 		return nil
 	end
 
+	local rarity = tonumber(capsuleInfo.Rarity) or 1
+	if rarity > 1 then
+		if model:IsA("Model") then
+			model:ScaleTo(1.5)
+		elseif model:IsA("BasePart") then
+			model.Size = model.Size * 1.5
+		end
+		model:SetAttribute("CapsuleInfoScale", 1.5)
+	end
+
+	applyCapsuleInfoBillboard(model, capsuleInfo)
 	setAnchored(model, true)
 	local prompt = createPrompt(model, primary, capsuleInfo.Price)
 	prompt.Triggered:Connect(function(player)
@@ -638,7 +869,7 @@ function EggService:HandlePurchase(player, model, capsuleInfo)
 	model:Destroy()
 end
 
-function EggService:HandleOpen(player, model)
+function EggService:HandleOpen(player, model, ignoreReady)
 	if not player or not player.Parent then
 		return
 	end
@@ -651,7 +882,7 @@ function EggService:HandleOpen(player, model)
 	if model:GetAttribute("OwnerUserId") ~= player.UserId then
 		return
 	end
-	if model:GetAttribute("HatchReady") ~= true then
+	if not ignoreReady and model:GetAttribute("HatchReady") ~= true then
 		return
 	end
 
@@ -666,9 +897,10 @@ function EggService:HandleOpen(player, model)
 		return
 	end
 
+	local eggUid = model:GetAttribute("EggUid")
+	clearPaidOpenRequest(player, eggUid)
 	model:SetAttribute("IsOpened", true)
 	DataService:AddCapsuleOpen(player, capsuleId)
-	local eggUid = model:GetAttribute("EggUid")
 	if eggUid then
 		DataService:RemovePlacedEgg(player, eggUid)
 	end
@@ -696,6 +928,72 @@ function EggService:HandleOpen(player, model)
 	model:Destroy()
 end
 
+function EggService:HandlePaidOpenPrompt(player, model)
+	if not player or not player.Parent then
+		return
+	end
+	if not model or not model.Parent then
+		return
+	end
+	if model:GetAttribute("IsOpened") == true then
+		return
+	end
+	if model:GetAttribute("OwnerUserId") ~= player.UserId then
+		return
+	end
+	if isHatchReady(model) then
+		setHatchReady(model)
+		return
+	end
+
+	local productId = tonumber(model:GetAttribute("DeveloperProductId"))
+	if not productId then
+		return
+	end
+
+	local eggUid = model:GetAttribute("EggUid")
+	if not eggUid then
+		return
+	end
+
+	local pending = paidOpenRequests[player.UserId]
+	if pending and pending.EggUid ~= eggUid then
+		return
+	end
+
+	paidOpenRequests[player.UserId] = {
+		EggUid = eggUid,
+		ProductId = productId,
+	}
+	MarketplaceService:PromptProductPurchase(player, productId)
+end
+
+function EggService:HandlePaidOpenReceipt(player, productId)
+	if not player or not player.Parent then
+		return false
+	end
+	local normalizedProductId = tonumber(productId) or productId
+	local pending = paidOpenRequests[player.UserId]
+	if not pending or pending.ProductId ~= normalizedProductId then
+		return false
+	end
+	paidOpenRequests[player.UserId] = nil
+
+	local model = findPlacedCapsuleByUid(player, pending.EggUid)
+	if not model or not model.Parent then
+		return true
+	end
+	if model:GetAttribute("OwnerUserId") ~= player.UserId then
+		return true
+	end
+	if model:GetAttribute("IsOpened") == true then
+		return true
+	end
+
+	self:HandleOpen(player, model, true)
+	return true
+end
+
 local function createCapsuleTool(player, capsuleInfo, count, stackIndex)
 	local capsuleFolder = ReplicatedStorage:WaitForChild("Capsule")
 	local source = capsuleFolder:FindFirstChild(capsuleInfo.ModelName)
@@ -714,6 +1012,7 @@ local function createCapsuleTool(player, capsuleInfo, count, stackIndex)
 	tool:SetAttribute("Rarity", capsuleInfo.Rarity)
 	tool:SetAttribute("Price", capsuleInfo.Price)
 	tool:SetAttribute("OpenSeconds", capsuleInfo.OpenSeconds)
+	tool:SetAttribute("DeveloperProductId", capsuleInfo.DeveloperProductId)
 	setStackCount(tool, count or 1)
 	ensureStackIndex(player, tool, stackIndex)
 
@@ -851,6 +1150,7 @@ function EggService:PlaceFromTool(player, tool, targetWorldPosition)
 	model:SetAttribute("Quality", capsuleInfo.Quality)
 	model:SetAttribute("Rarity", capsuleInfo.Rarity)
 	model:SetAttribute("OpenSeconds", capsuleInfo.OpenSeconds)
+	model:SetAttribute("DeveloperProductId", capsuleInfo.DeveloperProductId)
 	model:SetAttribute("OwnerUserId", player.UserId)
 	model:SetAttribute("Placed", true)
 
@@ -1028,6 +1328,7 @@ function EggService:CreatePlacedCapsuleFromData(player, capsuleInfo, entry, plac
 	model:SetAttribute("Quality", capsuleInfo.Quality)
 	model:SetAttribute("Rarity", capsuleInfo.Rarity)
 	model:SetAttribute("OpenSeconds", capsuleInfo.OpenSeconds)
+	model:SetAttribute("DeveloperProductId", capsuleInfo.DeveloperProductId)
 	model:SetAttribute("OwnerUserId", player.UserId)
 	model:SetAttribute("Placed", true)
 	if entry.Uid then
@@ -1300,6 +1601,7 @@ function EggService:UnbindPlayer(player)
 
 	self:ClearPlacedCapsules(player)
 	playerStackIndex[player.UserId] = nil
+	paidOpenRequests[player.UserId] = nil
 end
 
 function EggService:ClearPlayerState(player)
@@ -1327,6 +1629,7 @@ function EggService:ClearPlayerState(player)
 
 	self:ClearPlacedCapsules(player)
 	playerStackIndex[player.UserId] = nil
+	paidOpenRequests[player.UserId] = nil
 end
 
 return EggService

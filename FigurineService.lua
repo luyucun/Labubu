@@ -19,6 +19,7 @@ local FigurinePoolConfig = require(ReplicatedStorage:WaitForChild("Config"):Wait
 local UpgradeConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("UpgradeConfig"))
 
 local DataService = require(script.Parent:WaitForChild("DataService"))
+local FriendBonusService = require(script.Parent:WaitForChild("FriendBonusService"))
 
 local Modules = ReplicatedStorage:WaitForChild("Modules")
 local FormatHelper = require(Modules:WaitForChild("FormatHelper"))
@@ -28,6 +29,13 @@ FigurineService.__index = FigurineService
 
 local rng = Random.new()
 local playerStates = {} -- [userId] = {Active, LoopStarted, UiEntries, ButtonConnections, TouchStates, PlatformTweens, ModelTweens, ButtonEffects}
+local MAX_RARITY_LEVEL = 5
+local RARITY_EFFECT_NAMES = {
+	[2] = { "EffectLight" },
+	[3] = { "EffectGold" },
+	[4] = { "EffectDiamond" },
+	[5] = { "EffectRaibow", "EffectRainbow" },
+}
 
 local CLAIM_COOLDOWN = 0.5
 local CLAIM_EFFECT_DEFAULT_COUNT = 25
@@ -307,6 +315,111 @@ local function findFigurineModel(folder, figurineId, ownerUserId)
 	return nil
 end
 
+local function normalizeRarity(value)
+	local rarity = tonumber(value) or 1
+	if rarity < 1 then
+		return 1
+	end
+	if rarity > MAX_RARITY_LEVEL then
+		return MAX_RARITY_LEVEL
+	end
+	return rarity
+end
+
+local function applySeatTransparency(seat, visible)
+	if not seat then
+		return
+	end
+	if seat:IsA("BasePart") then
+		seat.Transparency = visible and 0 or 1
+	end
+	for _, obj in ipairs(seat:GetDescendants()) do
+		if obj:IsA("BasePart") then
+			obj.Transparency = visible and 0 or 1
+		end
+	end
+end
+
+local function applyRaritySeats(model, rarity)
+	if not model then
+		return
+	end
+	local target = normalizeRarity(rarity)
+	for index = 1, MAX_RARITY_LEVEL do
+		local seat = model:FindFirstChild(string.format("Seat%d", index), true)
+		if seat then
+			applySeatTransparency(seat, index == target)
+		end
+	end
+end
+
+local function findPartLbb(model)
+	if not model then
+		return nil
+	end
+	if model:IsA("BasePart") then
+		if model.Name == "PartLbb" then
+			return model
+		end
+		local found = model:FindFirstChild("PartLbb", true)
+		return found and found:IsA("BasePart") and found or nil
+	end
+	local found = model:FindFirstChild("PartLbb", true)
+	return found and found:IsA("BasePart") and found or nil
+end
+
+local function resolveRarityEffectTemplate(rarity)
+	local effectRoot = ReplicatedStorage:FindFirstChild("Effect")
+	if not effectRoot then
+		return nil
+	end
+	local levelFolder = effectRoot:FindFirstChild("LevelRarity")
+	if not levelFolder then
+		return nil
+	end
+	local names = RARITY_EFFECT_NAMES[rarity]
+	if not names then
+		return nil
+	end
+	for _, name in ipairs(names) do
+		local template = levelFolder:FindFirstChild(name)
+		if template then
+			return template
+		end
+	end
+	return nil
+end
+
+local function applyRarityEffects(model, rarity)
+	local part = findPartLbb(model)
+	if not part then
+		return
+	end
+	local existing = part:FindFirstChild("RarityEffects")
+	if existing then
+		existing:Destroy()
+	end
+	if rarity <= 1 then
+		return
+	end
+	local template = resolveRarityEffectTemplate(rarity)
+	if not template then
+		return
+	end
+	local container = Instance.new("Folder")
+	container.Name = "RarityEffects"
+	container.Parent = part
+	for _, child in ipairs(template:GetChildren()) do
+		child:Clone().Parent = container
+	end
+end
+
+local function applyFigurineRarityDisplay(model, rarity)
+	local normalized = normalizeRarity(rarity)
+	applyRaritySeats(model, normalized)
+	applyRarityEffects(model, normalized)
+end
+
 local function getPlayerState(player)
 	local state = playerStates[player.UserId]
 	if not state then
@@ -516,7 +629,17 @@ local function getFigurineRate(player, figurineInfo)
 		return 0
 	end
 	local state = DataService:EnsureFigurineState(player, figurineInfo.Id)
-	return DataService:CalculateFigurineRate(figurineInfo, state)
+	local baseRate = DataService:CalculateFigurineRate(figurineInfo, state)
+	if baseRate <= 0 then
+		return 0
+	end
+	local multiplier = DataService:GetOutputMultiplier(player)
+	local rate = baseRate * multiplier
+	local bonusFactor = FriendBonusService:GetBonusFactor(player)
+	if bonusFactor <= 1 then
+		return rate
+	end
+	return rate * bonusFactor
 end
 
 local function getPendingCoins(player, figurineId, rate)
@@ -534,7 +657,7 @@ local function getPendingCoins(player, figurineId, rate)
 	if pending < 0 then
 		pending = 0
 	end
-	return math.floor(pending + 0.0001)
+	return math.ceil(pending - 1e-9)
 end
 
 local function updateMoneyLabel(player, figurineId, entry)
@@ -852,7 +975,9 @@ local function placeFigurineModel(player, figurineInfo)
 	model:SetAttribute("FigurineId", figurineInfo.Id)
 	model:SetAttribute("FigurineName", figurineInfo.Name)
 	model:SetAttribute("Quality", figurineInfo.Quality)
-	model:SetAttribute("Rarity", figurineInfo.Rarity)
+	local state = DataService:EnsureFigurineState(player, figurineInfo.Id)
+	local rarity = normalizeRarity(state and state.Rarity or figurineInfo.Rarity)
+	model:SetAttribute("Rarity", rarity)
 	model:SetAttribute("OwnerUserId", player.UserId)
 
 	local primary = getPrimaryPart(model)
@@ -876,6 +1001,7 @@ local function placeFigurineModel(player, figurineInfo)
 	else
 		model:PivotTo(CFrame.new(targetCFrame.Position) * modelRotation)
 	end
+	applyFigurineRarityDisplay(model, rarity)
 	model.Parent = figurineFolder
 	return true
 end
@@ -1117,6 +1243,14 @@ function FigurineService:GrantFromCapsule(player, capsuleInfo, presentDelaySecon
 		local entry = state.UiEntries[figurineId]
 		updateLevelLabel(player, figurineId, entry)
 		updateMoneyLabel(player, figurineId, entry)
+		local homeFolder = getHomeFolder(player)
+		local figurineFolder = getFigurineFolder(homeFolder)
+		local model = findFigurineModel(figurineFolder, figurineId, player.UserId)
+		if model then
+			local rarity = normalizeRarity(result.Rarity)
+			model:SetAttribute("Rarity", rarity)
+			applyFigurineRarityDisplay(model, rarity)
+		end
 	end
 
 	return figurineInfo, result

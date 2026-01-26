@@ -12,6 +12,8 @@ ReplicatedStorage
         ├── PushInitData（RemoteEvent）
         ├── RequestResync（RemoteEvent）
         ├── PushResync（RemoteEvent）
+        ├── RequestCoinPurchase（RemoteEvent）
+        ├── RequestOutputMultiplierPurchase（RemoteEvent）
         ├── BuyConveyorEgg（RemoteEvent）
         ├── PlaceEgg（RemoteEvent）
         ├── OpenEgg（RemoteEvent）
@@ -22,6 +24,8 @@ ReplicatedStorage
         ├── GoHome（RemoteEvent）
         ├── UpdateAudioSettings（RemoteEvent）
         ├── PlaySfx（RemoteEvent）
+        ├── RequestGlobalLeaderboard（RemoteEvent）
+        ├── PushGlobalLeaderboard（RemoteEvent）
         └── ErrorHint（RemoteEvent）
 
 事件清单
@@ -92,6 +96,24 @@ ReplicatedStorage
 15. PlaySfx (S->C)
 - 参数: Kind
 - 说明: 服务端通知客户端播放音效（Collect/Unlock）
+
+16. RequestGlobalLeaderboard (C->S)
+- 参数: 无
+- 说明: 客户端请求全局排行榜列表
+
+17. PushGlobalLeaderboard (S->C)
+- 参数: List, NextRefreshTime
+- 说明: 服务端推送全局排行榜列表与下一次刷新时间戳
+
+18. RequestCoinPurchase (C->S)
+- 参数: ProductId
+- 说明: 主界面CoinAdd按钮请求购买开发者商品
+- 校验: 仅限玩家自身、产速阈值、频率限制
+
+19. RequestOutputMultiplierPurchase (C->S)
+- 参数: 无
+- 说明: DoubleForever按钮请求购买产速倍率
+- 校验: 仅限玩家自身、线性购买、频率限制
 
 备注
 - 所有随机与核心计算只在服务端

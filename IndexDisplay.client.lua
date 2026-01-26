@@ -17,16 +17,26 @@ local modulesFolder = ReplicatedStorage:WaitForChild("Modules")
 local FigurineConfig = require(configFolder:WaitForChild("FigurineConfig"))
 local QualityConfig = require(configFolder:WaitForChild("QualityConfig"))
 local BackpackVisibility = require(modulesFolder:WaitForChild("BackpackVisibility"))
+local GuiResolver = require(modulesFolder:WaitForChild("GuiResolver"))
 local modelRoot = ReplicatedStorage:WaitForChild("LBB")
 
-local mainGui = playerGui:WaitForChild("MainGui", 10)
+local mainGui = GuiResolver.WaitForLayer(playerGui, { "MainGui", "MainGUI", "Main", "MainUI" }, {
+	"CoinNum",
+	"CoinBuff",
+	"Bag",
+	"Index",
+	"Home",
+}, 30)
 if not mainGui then
 	warn("[IndexDisplay] MainGui not found")
-	return
 end
 
 local function resolveIndexButton()
-	local button = mainGui:FindFirstChild("Index")
+	local root = mainGui or playerGui
+	if not root then
+		return nil
+	end
+	local button = root:FindFirstChild("Index")
 	if button and not button:IsA("GuiButton") then
 		local nested = button:FindFirstChildWhichIsA("GuiButton", true)
 		if nested then
@@ -36,7 +46,7 @@ local function resolveIndexButton()
 	if button and button:IsA("GuiButton") then
 		return button
 	end
-	local descendant = mainGui:FindFirstChild("Index", true)
+	local descendant = root:FindFirstChild("Index", true)
 	if descendant then
 		if descendant:IsA("GuiButton") then
 			return descendant
@@ -54,7 +64,11 @@ if not indexButton then
 	warn("[IndexDisplay] MainGui.Index not found")
 end
 
-local indexGui = playerGui:WaitForChild("Index", 10)
+local indexGui = GuiResolver.WaitForLayer(playerGui, { "Index", "IndexGui", "IndexGUI" }, {
+	"IndexBg",
+	"InfoBg",
+	"FigurineTemplate",
+}, 30)
 if not indexGui then
 	warn("[IndexDisplay] Index screen gui not found")
 	return
@@ -99,10 +113,16 @@ if not template then
 	return
 end
 
-local bagGui = playerGui:FindFirstChild("Bag")
+local bagGui = GuiResolver.FindLayer(playerGui, { "Bag", "BagGui", "BagGUI" }, {
+	"BagBg",
+	"CapsuleTemplate",
+})
 local bagBg = bagGui and bagGui:FindFirstChild("BagBg")
 
-local checkGui = playerGui:WaitForChild("Check", 10)
+local checkGui = GuiResolver.WaitForLayer(playerGui, { "Check", "CheckGui", "CheckGUI" }, {
+	"CheckBg",
+	"ViewportFrame",
+}, 20)
 if not checkGui then
 	warn("[IndexDisplay] Check screen gui not found")
 end
@@ -842,7 +862,8 @@ end)
 
 bindIndexButton(indexButton)
 if not indexBound then
-	mainGui.DescendantAdded:Connect(function(child)
+	local watchRoot = mainGui or playerGui
+	watchRoot.DescendantAdded:Connect(function(child)
 		if indexBound or child.Name ~= "Index" then
 			return
 		end

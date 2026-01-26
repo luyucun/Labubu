@@ -1,9 +1,9 @@
 ﻿--[[
 游戏架构设计文档
-版本: V4.0
+版本: V4.2
 最后更新: 2026-01-21
 ]]
-游戏架构设计 V4.0
+游戏架构设计 V4.2
 
 1. 设计原则
 - 服务端权威：货币、随机、产出、升级、存档都在服务端
@@ -28,10 +28,12 @@ ReplicatedStorage/
 - Config/FigurineRateConfig（手办产速系数）
 - Config/QualityConfig（品质图标配置）
 - OpenProgresTemplate（盲盒开启进度UI模板）
+- CapsuleInfo（盲盒信息BillboardGui模板）
 - Modules/FormatHelper（数值格式化）
 - Modules/AudioManager（音频管理）
 - Modules/ButtonPressEffect（按钮按下缩放效果）
 - Modules/BackpackVisibility（背包隐藏计数与显示状态）
+- Modules/GuiResolver（UI路径容错查找）
 - Events/LabubuEvents（具体见 RemoteEvent列表.lua）
 - Capsule（盲盒模型资源）
 - LBB（手办模型资源）
@@ -42,17 +44,21 @@ ServerScriptService/
 - Server/DataService: 会话缓存、节流存档、离线收益、统一数据更新
 - Server/GMCommands: GM命令管理（金币增减/清零/命令列表）
 - Server/HomeService: 生成基地、绑定Owner、缓存关键引用
-- Server/ConveyorService: 按刷新池权重产蛋与生命周期管理
+- Server/ConveyorService: 按OutputSpeed解锁刷新池，抽品质并做稀有度突变，产蛋与生命周期管理
 - Server/EggService: 盲盒购买/背包/放置/倒计时
 - Server/FigurineService: 盲盒开盒随机手办/展台摆放/待领取产币与领取触发
-- Server/ClaimService: 领取全部/十倍领取/自动领取付费功能
+- Server/ClaimService: 领取全部/十倍领取/自动领取/付费买币
 - Server/LeaderboardService: 服务器内排行榜（总产速/总游戏时间）
+- Server/FriendBonusService: 同服好友加成统计与属性同步
+- Server/GlobalLeaderboardService: 全局排行榜数据维护与刷新推送
 - Server/PetService: 图鉴状态、产币、升级与品阶更新
 - Server/NetService: 统一RemoteEvent校验与分发
 
 StarterPlayer/StarterPlayerScripts/
 - Client/UIController: 货币、背包、孵化、图鉴UI刷新
 - UI/CoinDisplay: 金币数值显示(MainGui/CoinNum)
+- UI/CoinAddDisplay: CoinAdd按钮显示/数值刷新/购买请求
+- UI/DoubleForeverDisplay: DoubleForever倍率显示/购买请求
 - UI/BackpackDisplay: 自定义背包UI显示与装备交互
 - UI/BagDisplay: 盲盒背包总览界面显示与筛选
 - UI/IndexDisplay: 手办索引界面显示与筛选/检视入口
@@ -61,7 +67,11 @@ StarterPlayer/StarterPlayerScripts/
 - UI/GachaResult: 抽卡结果表现与升级进度动画
 - UI/HomeButton: 主界面Home按钮回基地请求
 - UI/ButtonPressEffect: 全局按钮按下缩放效果绑定
+- UI/GuiBootstrap: 兜底补齐PlayerGui中的UI
+- UI/InviteButton: 邀请好友按钮弹出系统邀请界面
+- UI/FriendBonusDisplay: 好友加成文本显示
 - UI/OptionsDisplay: 设置界面(BGM/音效开关)与音效播放监听
+- UI/GlobalLeaderboardDisplay: 全局排行榜界面展示与刷新倒计时
 - UI/AssetPreload: 进入游戏前预加载所有图片资源
 - Client/CameraFocus: 新手办升台镜头聚焦
 - Client/InteractionController: 点击交互、放置操作、开蛋请求
@@ -94,6 +104,7 @@ PlayerData
 - CapsuleOpenTotal: number
 - CapsuleOpenById: { [CapsuleId] = number }
 - OutputSpeed: number
+- OutputMultiplier: number
 - AutoCollect: boolean
 - MusicEnabled: boolean
 - SfxEnabled: boolean
@@ -119,35 +130,43 @@ PlayerData
 - ConveyorEgg: EggId, Price, OwnerUserId, Uid, SpawnTime
 - PetBoard: PetId, OwnerUserId
 - FigurineOwned: Folder<BoolValue> 客户端索引界面读取玩家手办拥有状态
+- FriendBonusCount: number
+- FriendBonusPercent: number
+- OutputMultiplier: number
 
 4. 核心系统职责
 - DataService：会话缓存 + Dirty 标记 + 间隔保存 + BindToClose 兜底，UpdateAsync 持久化，离线结算，统计(在线时长/盲盒开启/总产出速度)，手办升级数据管理
 - GMCommands：GM命令处理（加金币/清金币/命令列表）
 - HomeService：玩家进入创建基地，设置OwnerUserId并缓存节点，维护地板范围/格位信息，更新基地PlayerInfo展示，出生朝向对准ClaimAll
-- ConveyorService：按配置间隔产蛋，服务端生成 EggUid，维护索引/最大蛋数/过期清理
-- EggService：盲盒购买校验、背包管理、放置、倒计时与开盒触发
+- ConveyorService：按OutputSpeed选择最高解锁刷新池，抽品质与稀有度突变，按配置间隔产蛋，服务端生成 EggUid，维护索引/最大蛋数/过期清理
+- EggService：盲盒购买校验、背包管理、放置、倒计时、付费开盒与开盒触发
 - FigurineService：开盒随机手办、展台放置、金币待领取/触碰领取、展台信息UI，升级展示
-- ClaimService：领取全部/十倍领取/自动领取通行证、UI状态切换与自动结算
+- ClaimService：领取全部/十倍领取/自动领取通行证/付费买币/产速倍率购买、UI状态切换与自动结算
+- FriendBonusService：同服好友数量统计与加成属性同步，变更时调整产币结算基准
+- GlobalLeaderboardService：全局排行榜数据维护，按分钟刷新并推送榜单
 - PetService：图鉴解锁、PendingCoins 累积、产币结算、升级条件与品阶更新
 - NetService：所有RemoteEvent统一入口，频率限制/归属/距离/状态/版本校验与重同步
 
 5. 核心流程
 - 玩家进入：随机分配空闲 Home 槽位 -> 绑定 SpawnLocation -> 读取数据(默认 Coins=GameConfig.StartCoins)
 - V1.3 流程：传送带按刷新池权重生成盲盒 -> 玩家交互购买 -> 盲盒进背包 -> 放置地面 -> 倒计时结束
-- 传送带产蛋：每个Home独立计时 -> 按刷新池权重生成蛋模型 -> 建立 EggUid 索引 -> 移动至末端 -> 自动销毁/过期清理
+- 传送带产蛋：每个Home独立计时 -> 按OutputSpeed解锁刷新池 -> 权重抽基础品质 -> 稀有度突变确定稀有度 -> 用品质+稀有度映射 CapsuleId -> 建立 EggUid 索引 -> 移动至末端 -> 自动销毁/过期清理
 - 购买蛋：客户端点击 -> 服务端校验(归属/距离/金币/冷却) -> 扣费 -> 入背包 -> 移除蛋
 - 放置蛋：客户端请求 -> 校验位置(在自家地板内/格位) -> 数量上限(MaxPlacedCapsules) -> 占用检测 -> 生成模型 -> 设置HatchEndTime
+- 付费开盲盒：倒计时阶段触发开发者商品购买，完成后直接开盒；若倒计时已结束则改走普通开盒交互
 - 开蛋：校验孵化完成 -> 按卡池权重随机手办 -> 下发OpenEggResult -> 客户端抽卡表现 -> 新卡延迟升台与镜头聚焦 -> 开始产币
 - Home按钮：客户端请求GoHome -> 服务端校验归属 -> 传送回基地出生点
 - 产币与收取：服务端按 LastCollectTime 结算，触碰领取按钮收取并清零累计
 - 领取全部/十倍领取：触碰触发开发者道具购买 -> 统一结算未领取金币 -> 更新各手办 LastCollectTime
 - 自动领取通行证：购买后 AutoCollect=true，隐藏ClaimAll/ClaimAllTen，按间隔自动结算
+- 付费买币：CoinAdd按钮请求购买 -> 回执按购买时OutputSpeed * Seconds发放金币
+- 产速倍率购买：DoubleForever按钮请求购买 -> 回执更新OutputMultiplier并刷新产速
 - 升级：获得同ID手办累积经验达到 UpgradeConfig 阈值自动升级，达到最高级停止
 - 离线收益：依据离线时长与上限秒数结算，登录时写入 PendingCoins
 - 版本不同步：客户端检测版本缺口 -> RequestResync -> 服务端下发全量快照
 
 6. 产币计算与限制（可调）
-- rate = baseRate * RarityCoeff * (1 + (Level - 1) * QualityCoeff)
+- rate = baseRate * RarityCoeff * (1 + (Level - 1) * QualityCoeff) * OutputMultiplier * (1 + 0.1 * FriendCount)
 - OfflineCapSeconds 由配置控制，超出部分不计
 - FigurineCoinCapSeconds 控制单个手办未领取累计上限时长
 - 在线收取：按 now - LastCollectTime 结算，不受离线封顶
@@ -157,6 +176,13 @@ PlayerData
 - 所有交互仅发送请求，不自行修改核心数据
 - UI使用服务端数据驱动，动画/特效纯客户端
 - Options设置界面控制BGM/音效开关，状态从玩家属性同步，音效由PlaySfx事件触发
+- CoinBuff显示同服好友加成，文本随 FriendBonusPercent 更新，+xx%高亮
+- Invite按钮触发系统默认邀请好友界面
+- 全局排行榜界面通过 PushGlobalLeaderboard 刷新榜单与倒计时
+- CoinAdd按钮在产速>=20/s显示，Number随产速实时刷新
+- DoubleForever按钮显示下一档倍率与价格，购买后刷新至更高倍率
+- 传送带盲盒刷新时挂载 CapsuleInfo BillboardGui，显示名称/价格/稀有度/品质颜色
+- 手办模型展示时按稀有度切换Seat1~Seat5透明度，并在PartLbb挂载稀有度特效
 - 开盲盒结果通过OpenEggResult驱动抽卡界面与升级进度动画
 - 抽卡结果播放前等待 AssetsPreloaded，并预加载本次盲盒/手办图标
 - Index列表的CheckIcon进入Check检视界面，ViewportFrame展示手办并支持拖拽旋转（+/-30）

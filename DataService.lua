@@ -34,6 +34,7 @@ local function defaultData()
 		CapsuleOpenTotal = 0,
 		CapsuleOpenById = {},
 		OutputSpeed = 0,
+		OutputMultiplier = 1,
 		AutoCollect = false,
 		MusicEnabled = true,
 		SfxEnabled = true,
@@ -204,6 +205,14 @@ local function normalizeOutputSpeed(value)
 	return num
 end
 
+local function normalizeOutputMultiplier(value)
+	local num = tonumber(value)
+	if not num or num < 1 then
+		return 1
+	end
+	return math.floor(num)
+end
+
 local function normalizeLevel(value)
 	local num = tonumber(value)
 	if not num or num < 1 then
@@ -286,6 +295,49 @@ local function calculateOutputSpeed(figurines, figurineStates)
 	return total
 end
 
+local function adjustCollectTimesForMultiplierChange(player, oldMultiplier, newMultiplier)
+	if not player or oldMultiplier == newMultiplier then
+		return
+	end
+	local record = sessionData[player.UserId]
+	if not record then
+		return
+	end
+	local figurines = record.Data.Figurines
+	if type(figurines) ~= "table" then
+		return
+	end
+	local now = os.time()
+	local capSeconds = tonumber(GameConfig.FigurineCoinCapSeconds) or 0
+	for figurineId, owned in pairs(figurines) do
+		if owned then
+			local info = FigurineConfig.GetById(tonumber(figurineId) or figurineId)
+			if info then
+				local state = DataService:EnsureFigurineState(player, figurineId)
+				local lastCollect = tonumber(state and state.LastCollectTime) or now
+				local elapsed = math.max(0, now - lastCollect)
+				if capSeconds > 0 then
+					elapsed = math.min(elapsed, capSeconds)
+				end
+				local baseRate = calculateFigurineRate(info, state)
+				if baseRate > 0 then
+					local oldRate = baseRate * oldMultiplier
+					local newRate = baseRate * newMultiplier
+					if newRate > 0 then
+						local pending = oldRate * elapsed
+						local targetElapsed = pending / newRate
+						if capSeconds > 0 then
+							targetElapsed = math.min(targetElapsed, capSeconds)
+						end
+						local newLastCollect = now - targetElapsed
+						DataService:SetFigurineLastCollectTime(player, figurineId, newLastCollect)
+					end
+				end
+			end
+		end
+	end
+end
+
 function DataService:CalculateFigurineRate(figurineInfo, state)
 	return calculateFigurineRate(figurineInfo, state)
 end
@@ -330,6 +382,7 @@ local function applyStatsAttributes(player, data)
 	player:SetAttribute("TotalPlayTime", normalizeCount(data.TotalPlayTime))
 	player:SetAttribute("CapsuleOpenTotal", normalizeCount(data.CapsuleOpenTotal))
 	player:SetAttribute("OutputSpeed", normalizeOutputSpeed(data.OutputSpeed))
+	player:SetAttribute("OutputMultiplier", normalizeOutputMultiplier(data.OutputMultiplier))
 	player:SetAttribute("AutoCollect", data.AutoCollect == true)
 	player:SetAttribute("MusicEnabled", data.MusicEnabled == true)
 	player:SetAttribute("SfxEnabled", data.SfxEnabled == true)
@@ -478,6 +531,17 @@ function DataService:LoadPlayer(player)
 		data.SfxEnabled = data.SfxEnabled == true
 	end
 
+	if data.OutputMultiplier == nil then
+		data.OutputMultiplier = 1
+		needsSave = true
+	else
+		local normalizedMultiplier = normalizeOutputMultiplier(data.OutputMultiplier)
+		if data.OutputMultiplier ~= normalizedMultiplier then
+			data.OutputMultiplier = normalizedMultiplier
+			needsSave = true
+		end
+	end
+
 
 	local normalizedPlaytime = normalizeCount(data.TotalPlayTime)
 	if data.TotalPlayTime ~= normalizedPlaytime then
@@ -502,6 +566,7 @@ function DataService:LoadPlayer(player)
 	end
 
 	local recalculatedSpeed = calculateOutputSpeed(data.Figurines, data.FigurineStates)
+		* normalizeOutputMultiplier(data.OutputMultiplier)
 	local normalizedSpeed = normalizeOutputSpeed(data.OutputSpeed)
 	if normalizedSpeed ~= recalculatedSpeed then
 		data.OutputSpeed = recalculatedSpeed
@@ -535,6 +600,14 @@ end
 function DataService:GetCoins(player)
 	local record = sessionData[player.UserId]
 	return record and record.Data.Coins or 0
+end
+
+function DataService:GetOutputMultiplier(player)
+	local record = sessionData[player.UserId]
+	if not record then
+		return 1
+	end
+	return normalizeOutputMultiplier(record.Data.OutputMultiplier)
 end
 
 function DataService:GetFigurines(player)
@@ -614,6 +687,29 @@ function DataService:SetAudioSettings(player, musicEnabled, sfxEnabled)
 			player:SetAttribute("SfxEnabled", record.Data.SfxEnabled)
 		end
 	end
+end
+
+function DataService:SetOutputMultiplier(player, multiplier)
+	local record = sessionData[player.UserId]
+	if not record then
+		return 1
+	end
+	local normalized = normalizeOutputMultiplier(multiplier)
+	local current = normalizeOutputMultiplier(record.Data.OutputMultiplier)
+	if normalized == current then
+		if player and player.Parent then
+			player:SetAttribute("OutputMultiplier", current)
+		end
+		return current
+	end
+	adjustCollectTimesForMultiplierChange(player, current, normalized)
+	record.Data.OutputMultiplier = normalized
+	record.Dirty = true
+	if player and player.Parent then
+		player:SetAttribute("OutputMultiplier", normalized)
+	end
+	self:RecalculateOutputSpeed(player)
+	return normalized
 end
 
 
@@ -930,6 +1026,7 @@ function DataService:RecalculateOutputSpeed(player)
 		return 0
 	end
 	local total = calculateOutputSpeed(record.Data.Figurines, record.Data.FigurineStates)
+		* normalizeOutputMultiplier(record.Data.OutputMultiplier)
 	if record.Data.OutputSpeed ~= total then
 		record.Data.OutputSpeed = total
 		record.Dirty = true

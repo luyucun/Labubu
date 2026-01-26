@@ -34,6 +34,9 @@ local FOCUS_HEIGHT_OFFSET = 16
 local FOCUS_LOOK_AT_HEIGHT = 0.65
 -- 镜头正对台子朝向（-1 表示在台子正面，1 表示在台子背面）
 local FOCUS_FACE_SIGN = 1
+-- Exit 按钮等待超时（秒）
+local EXIT_WAIT_TIMEOUT = 5
+local EXIT_WAIT_INTERVAL = 0.2
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -184,6 +187,20 @@ local function bindExitButton()
 	end)
 end
 
+local function waitForExitButton(token)
+	local startTime = os.clock()
+	while active and token == focusToken and os.clock() - startTime < EXIT_WAIT_TIMEOUT do
+		local button = resolveExitButton()
+		if button then
+			bindExitButton()
+			button.Visible = true
+			return true
+		end
+		task.wait(EXIT_WAIT_INTERVAL)
+	end
+	return false
+end
+
 local function playFocus(targetCFrame)
 	if not camera or not targetCFrame then
 		return
@@ -218,7 +235,9 @@ local function playFocus(targetCFrame)
 			if not active or token ~= focusToken then
 				return
 			end
-			setExitVisible(true)
+			if not waitForExitButton(token) then
+				stopFocus(true)
+			end
 		end)
 	end)
 	moveTween:Play()

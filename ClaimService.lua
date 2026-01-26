@@ -17,6 +17,7 @@ local FormatHelper = require(ReplicatedStorage:WaitForChild("Modules"):WaitForCh
 
 local DataService = require(script.Parent:WaitForChild("DataService"))
 local FigurineService = require(script.Parent:WaitForChild("FigurineService"))
+local EggService = require(script.Parent:WaitForChild("EggService"))
 
 local ClaimService = {}
 ClaimService.__index = ClaimService
@@ -30,6 +31,12 @@ local DISABLED_FOLDER_NAME = "MonetizationDisabled"
 local CLAIM_EFFECT_DEFAULT_COUNT = 25
 local CLAIM_EFFECT_FOLDER_NAME = "Effect"
 local CLAIM_EFFECT_TEMPLATE_NAME = "EffectTouchMoney"
+local coinPurchaseRequests = {} -- [userId] = { [productId] = speed }
+local coinPurchaseCooldowns = {}
+local COIN_PURCHASE_COOLDOWN = 0.5
+local multiplierPurchaseRequests = {} -- [userId] = { ProductId = number, Multiplier = number }
+local multiplierPurchaseCooldowns = {}
+local MULTIPLIER_PURCHASE_COOLDOWN = 0.5
 
 local function ensureLabubuEvents()
 	local eventsFolder = ReplicatedStorage:FindFirstChild("Events")
@@ -63,6 +70,103 @@ local function ensurePlaySfxEvent()
 end
 
 local playSfxEvent = ensurePlaySfxEvent()
+
+local function buildCoinAddProductMap()
+	local map = {}
+	local list = GameConfig.CoinAddProducts
+	if type(list) ~= "table" then
+		return map
+	end
+	for _, entry in ipairs(list) do
+		if type(entry) == "table" then
+			local productId = tonumber(entry.ProductId)
+			local seconds = tonumber(entry.Seconds)
+			if productId and seconds and seconds > 0 then
+				map[productId] = {
+					Seconds = seconds,
+					ButtonName = entry.ButtonName,
+				}
+			end
+		end
+	end
+	return map
+end
+
+local COIN_ADD_PRODUCTS = buildCoinAddProductMap()
+
+local function ensureCoinPurchaseEvent()
+	local labubuEvents = ensureLabubuEvents()
+	local event = labubuEvents:FindFirstChild("RequestCoinPurchase")
+	if event and not event:IsA("RemoteEvent") then
+		event:Destroy()
+		event = nil
+	end
+	if not event then
+		event = Instance.new("RemoteEvent")
+		event.Name = "RequestCoinPurchase"
+		event.Parent = labubuEvents
+	end
+	return event
+end
+
+local coinPurchaseEvent = ensureCoinPurchaseEvent()
+
+local function buildMultiplierProducts()
+	local list = GameConfig.OutputMultiplierProducts
+	if type(list) ~= "table" then
+		return {}, {}
+	end
+	local products = {}
+	local byProductId = {}
+	for _, entry in ipairs(list) do
+		if type(entry) == "table" then
+			local multiplier = tonumber(entry.Multiplier)
+			local productId = tonumber(entry.ProductId)
+			local price = tonumber(entry.Price)
+			if multiplier and productId and price then
+				local info = {
+					Multiplier = multiplier,
+					ProductId = productId,
+					Price = price,
+				}
+				table.insert(products, info)
+				byProductId[productId] = info
+			end
+		end
+	end
+	table.sort(products, function(a, b)
+		return a.Multiplier < b.Multiplier
+	end)
+	return products, byProductId
+end
+
+local MULTIPLIER_PRODUCTS, MULTIPLIER_BY_PRODUCT = buildMultiplierProducts()
+
+local function getNextMultiplierEntry(currentMultiplier)
+	for _, entry in ipairs(MULTIPLIER_PRODUCTS) do
+		if entry.Multiplier > currentMultiplier then
+			return entry
+		end
+	end
+	return nil
+end
+
+local function ensureOutputMultiplierEvent()
+	local labubuEvents = ensureLabubuEvents()
+	local event = labubuEvents:FindFirstChild("RequestOutputMultiplierPurchase")
+	if event and not event:IsA("RemoteEvent") then
+		event:Destroy()
+		event = nil
+	end
+	if not event then
+		event = Instance.new("RemoteEvent")
+		event.Name = "RequestOutputMultiplierPurchase"
+		event.Parent = labubuEvents
+	end
+	return event
+end
+
+local outputMultiplierEvent = ensureOutputMultiplierEvent()
 
 local function fireCollectSfx(player)
 	if not playSfxEvent or not player or not player.Parent then
@@ -229,6 +333,65 @@ local function getPlayerState(player)
 		playerStates[player.UserId] = state
 	end
 	return state
+end
+
+local function getCoinAddInfo(productId)
+	local normalized = tonumber(productId) or productId
+	return COIN_ADD_PRODUCTS[normalized]
+end
+
+local function pushCoinPurchaseRequest(player, productId, speed)
+	if not player then
+		return
+	end
+	local userId = player.UserId
+	local userRequests = coinPurchaseRequests[userId]
+	if not userRequests then
+		userRequests = {}
+		coinPurchaseRequests[userId] = userRequests
+	end
+	userRequests[productId] = speed
+end
+
+local function popCoinPurchaseRequest(player, productId)
+	if not player then
+		return nil
+	end
+	local userRequests = coinPurchaseRequests[player.UserId]
+	if not userRequests then
+		return nil
+	end
+	local speed = userRequests[productId]
+	userRequests[productId] = nil
+	if next(userRequests) == nil then
+		coinPurchaseRequests[player.UserId] = nil
+	end
+	return speed
+end
+
+local function setMultiplierPurchaseRequest(player, entry)
+	if not player or not entry then
+		return
+	end
+	multiplierPurchaseRequests[player.UserId] = {
+		ProductId = entry.ProductId,
+		Multiplier = entry.Multiplier,
+	}
+end
+
+local function popMultiplierPurchaseRequest(player, productId)
+	if not player then
+		return nil
+	end
+	local pending = multiplierPurchaseRequests[player.UserId]
+	if not pending then
+		return nil
+	end
+	if productId and pending.ProductId ~= productId then
+		return nil
+	end
+	multiplierPurchaseRequests[player.UserId] = nil
+	return pending
 end
 
 local function getDisabledRoot()
@@ -519,6 +682,61 @@ function ClaimService:ApplyAutoCollectState(player, enabled)
 end
 
 function ClaimService:Init()
+	if coinPurchaseEvent then
+		coinPurchaseEvent.OnServerEvent:Connect(function(player, productId)
+			if not player or not player.Parent then
+				return
+			end
+			local normalizedProductId = tonumber(productId)
+			if not normalizedProductId then
+				return
+			end
+			if not getCoinAddInfo(normalizedProductId) then
+				return
+			end
+			local now = os.clock()
+			local last = coinPurchaseCooldowns[player.UserId] or 0
+			if now - last < COIN_PURCHASE_COOLDOWN then
+				return
+			end
+			coinPurchaseCooldowns[player.UserId] = now
+			local speed = tonumber(player:GetAttribute("OutputSpeed")) or 0
+			if speed < 0 then
+				speed = 0
+			end
+			local minSpeed = tonumber(GameConfig.CoinAddMinOutputSpeed) or 20
+			if speed < minSpeed then
+				return
+			end
+			pushCoinPurchaseRequest(player, normalizedProductId, speed)
+			MarketplaceService:PromptProductPurchase(player, normalizedProductId)
+		end)
+	end
+
+	if outputMultiplierEvent then
+		outputMultiplierEvent.OnServerEvent:Connect(function(player)
+			if not player or not player.Parent then
+				return
+			end
+			if #MULTIPLIER_PRODUCTS == 0 then
+				return
+			end
+			local now = os.clock()
+			local last = multiplierPurchaseCooldowns[player.UserId] or 0
+			if now - last < MULTIPLIER_PURCHASE_COOLDOWN then
+				return
+			end
+			multiplierPurchaseCooldowns[player.UserId] = now
+			local currentMultiplier = DataService:GetOutputMultiplier(player)
+			local nextEntry = getNextMultiplierEntry(currentMultiplier)
+			if not nextEntry then
+				return
+			end
+			setMultiplierPurchaseRequest(player, nextEntry)
+			MarketplaceService:PromptProductPurchase(player, nextEntry.ProductId)
+		end)
+	end
+
 	MarketplaceService.ProcessReceipt = function(receiptInfo)
 		local player = Players:GetPlayerByUserId(receiptInfo.PlayerId)
 		if not player then
@@ -538,6 +756,51 @@ function ClaimService:Init()
 			if grant > 0 then
 				fireCollectSfx(player)
 			end
+			return Enum.ProductPurchaseDecision.PurchaseGranted
+		end
+
+		local productId = tonumber(receiptInfo.ProductId)
+		local coinAddInfo = productId and getCoinAddInfo(productId) or nil
+		if coinAddInfo then
+			local speed = popCoinPurchaseRequest(player, productId)
+			if speed == nil then
+				speed = tonumber(player:GetAttribute("OutputSpeed")) or 0
+			end
+			if speed < 0 then
+				speed = 0
+			end
+			local seconds = tonumber(coinAddInfo.Seconds) or 0
+			local coins = speed * seconds
+			if coins < 0 then
+				coins = 0
+			end
+			coins = math.ceil(coins - 1e-9)
+			if coins > 0 then
+				DataService:AddCoins(player, coins)
+			end
+			return Enum.ProductPurchaseDecision.PurchaseGranted
+		end
+
+		local multiplierEntry = productId and MULTIPLIER_BY_PRODUCT[productId] or nil
+		if multiplierEntry then
+			local pending = popMultiplierPurchaseRequest(player, productId)
+			if pending and pending.ProductId == productId then
+				local currentMultiplier = DataService:GetOutputMultiplier(player)
+				local expected = getNextMultiplierEntry(currentMultiplier)
+				if expected and expected.ProductId == productId and pending.Multiplier > currentMultiplier then
+					DataService:SetOutputMultiplier(player, pending.Multiplier)
+				end
+				return Enum.ProductPurchaseDecision.PurchaseGranted
+			end
+			local currentMultiplier = DataService:GetOutputMultiplier(player)
+			local expected = getNextMultiplierEntry(currentMultiplier)
+			if expected and expected.ProductId == productId then
+				DataService:SetOutputMultiplier(player, expected.Multiplier)
+			end
+			return Enum.ProductPurchaseDecision.PurchaseGranted
+		end
+
+		if EggService:HandlePaidOpenReceipt(player, receiptInfo.ProductId) then
 			return Enum.ProductPurchaseDecision.PurchaseGranted
 		end
 
@@ -610,6 +873,10 @@ function ClaimService:UnbindPlayer(player)
 		end
 	end
 	playerStates[player.UserId] = nil
+	coinPurchaseRequests[player.UserId] = nil
+	coinPurchaseCooldowns[player.UserId] = nil
+	multiplierPurchaseRequests[player.UserId] = nil
+	multiplierPurchaseCooldowns[player.UserId] = nil
 end
 
 return ClaimService

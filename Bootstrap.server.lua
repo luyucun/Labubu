@@ -17,6 +17,8 @@ local HomeService = require(script.Parent:WaitForChild("HomeService"))
 local ConveyorService = require(script.Parent:WaitForChild("ConveyorService"))
 local ClaimService = require(script.Parent:WaitForChild("ClaimService"))
 local LeaderboardService = require(script.Parent:WaitForChild("LeaderboardService"))
+local FriendBonusService = require(script.Parent:WaitForChild("FriendBonusService"))
+local GlobalLeaderboardService = require(script.Parent:WaitForChild("GlobalLeaderboardService"))
 
 local function ensureLabubuEvents()
 	local eventsFolder = ReplicatedStorage:FindFirstChild("Events")
@@ -61,12 +63,21 @@ Players.CharacterAutoLoads = false
 HomeService:Init()
 ClaimService:Init()
 DataService:StartAutoSave()
+FriendBonusService:Init()
+GlobalLeaderboardService:Init()
 
 game:BindToClose(function()
 	DataService:SaveAll(true)
 end)
 
-Players.PlayerAdded:Connect(function(player)
+local function handlePlayerAdded(player)
+	if not player or not player.Parent then
+		return
+	end
+	if player:GetAttribute("BootstrapReady") then
+		return
+	end
+	player:SetAttribute("BootstrapReady", true)
 	print(string.format("[Bootstrap] PlayerAdded: %s (userId=%d)", player.Name, player.UserId))
 
 	if #Players:GetPlayers() > GameConfig.MaxPlayers then
@@ -85,6 +96,7 @@ Players.PlayerAdded:Connect(function(player)
 	DataService:LoadPlayer(player)
 	print("[Bootstrap] DataService:LoadPlayer done")
 	LeaderboardService:BindPlayer(player)
+	GlobalLeaderboardService:BindPlayer(player)
 
 	EggService:BindPlayer(player)
 	print("[Bootstrap] EggService:BindPlayer done")
@@ -94,6 +106,7 @@ Players.PlayerAdded:Connect(function(player)
 	ClaimService:BindPlayer(player)
 	print("[Bootstrap] ClaimService:BindPlayer done")
 	print("[Bootstrap] FigurineService:BindPlayer done")
+	FriendBonusService:HandlePlayerAdded(player)
 
 	print("[Bootstrap] Calling ConveyorService:StartForPlayer...")
 	local success, err = pcall(function()
@@ -106,7 +119,13 @@ Players.PlayerAdded:Connect(function(player)
 	end
 
 	player:LoadCharacterAsync()
-end)
+end
+
+Players.PlayerAdded:Connect(handlePlayerAdded)
+-- 初始化耗时可能导致错过 PlayerAdded，这里补处理已在服务器中的玩家
+for _, player in ipairs(Players:GetPlayers()) do
+	task.spawn(handlePlayerAdded, player)
+end
 
 Players.PlayerRemoving:Connect(function(player)
 	ConveyorService:StopForPlayer(player)
@@ -114,6 +133,8 @@ Players.PlayerRemoving:Connect(function(player)
 	FigurineService:UnbindPlayer(player)
 	ClaimService:UnbindPlayer(player)
 	LeaderboardService:UnbindPlayer(player)
+	GlobalLeaderboardService:UnbindPlayer(player)
+	FriendBonusService:HandlePlayerRemoving(player)
 	DataService:UnloadPlayer(player, true)
 	HomeService:ReleaseHome(player)
 end)

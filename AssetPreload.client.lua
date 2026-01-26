@@ -18,42 +18,93 @@ local StarterPlayer = game:GetService("StarterPlayer")
 local player = Players.LocalPlayer or Players.PlayerAdded:Wait()
 local playerGui = player:WaitForChild("PlayerGui")
 
-local function createLoadingGui()
-	local screenGui = Instance.new("ScreenGui")
-	screenGui.Name = "PreloadGui"
-	screenGui.IgnoreGuiInset = true
-	screenGui.DisplayOrder = 10000
-	screenGui.ResetOnSpawn = false
-	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
-	screenGui.Parent = playerGui
+local LOADING_IMAGES = {
+	"rbxassetid://97379194248218",
+	"rbxassetid://100148763396788",
+	"rbxassetid://130504383522242",
+	"rbxassetid://91249044330188",
+}
 
-	local blocker = Instance.new("TextButton")
-	blocker.Name = "Blocker"
-	blocker.BackgroundColor3 = Color3.new(0, 0, 0)
-	blocker.BackgroundTransparency = 0
-	blocker.Text = ""
-	blocker.AutoButtonColor = false
-	blocker.Active = true
-	blocker.Selectable = true
-	blocker.Size = UDim2.new(1, 0, 1, 0)
-	blocker.Position = UDim2.new(0, 0, 0, 0)
-	blocker.ZIndex = 10000
-	blocker.Parent = screenGui
+local function resolveLoadingGui()
+	local loadingGui = playerGui:FindFirstChild("Loading")
+	if not loadingGui then
+		loadingGui = playerGui:WaitForChild("Loading", 5)
+	end
+	if not loadingGui then
+		local template = StarterGui:FindFirstChild("Loading")
+		if template and template:IsA("ScreenGui") then
+			loadingGui = template:Clone()
+			loadingGui.ResetOnSpawn = false
+			loadingGui.Parent = playerGui
+		end
+	end
+	return loadingGui
+end
 
-	local label = Instance.new("TextLabel")
-	label.Name = "LoadingText"
-	label.BackgroundTransparency = 1
-	label.Text = "Loading..."
-	label.TextColor3 = Color3.new(1, 1, 1)
-	label.Font = Enum.Font.GothamBold
-	label.TextSize = 24
-	label.AnchorPoint = Vector2.new(0.5, 0.5)
-	label.Position = UDim2.new(0.5, 0, 0.5, 0)
-	label.Size = UDim2.new(0, 240, 0, 50)
-	label.ZIndex = 10001
-	label.Parent = blocker
+local function resolveLoadingState()
+	local loadingGui = resolveLoadingGui()
+	if not loadingGui then
+		return nil
+	end
+	local bg = loadingGui:FindFirstChild("Bg", true)
+	local loadingImage = bg and bg:FindFirstChild("LoadingImage", true)
+	local progressBg = bg and bg:FindFirstChild("ProgressBg", true)
+	local progressBar = progressBg and progressBg:FindFirstChild("Progressbar", true)
+	local numberLabel = progressBg and progressBg:FindFirstChild("Number", true)
+	return {
+		Gui = loadingGui,
+		Bg = bg,
+		LoadingImage = loadingImage,
+		Progressbar = progressBar,
+		Number = numberLabel,
+	}
+end
 
-	return screenGui
+local function setLoadingVisible(state, visible)
+	if not state then
+		return
+	end
+	if state.Gui and state.Gui:IsA("LayerCollector") then
+		state.Gui.Enabled = true
+	end
+	if state.Bg and state.Bg:IsA("GuiObject") then
+		state.Bg.Visible = visible == true
+	end
+end
+
+local function setLoadingProgress(state, progress)
+	if not state then
+		return
+	end
+	local clamped = math.clamp(progress or 0, 0, 1)
+	if state.Progressbar and state.Progressbar:IsA("GuiObject") then
+		local size = state.Progressbar.Size
+		state.Progressbar.Size = UDim2.new(clamped, size.X.Offset, size.Y.Scale, size.Y.Offset)
+	end
+	if state.Number and state.Number:IsA("TextLabel") then
+		state.Number.Text = string.format("%d%%", math.floor(clamped * 100 + 0.5))
+	end
+end
+
+local function setRandomLoadingImage(state)
+	if not state or not state.LoadingImage or #LOADING_IMAGES == 0 then
+		return nil
+	end
+	if state.LoadingImage:IsA("ImageLabel") or state.LoadingImage:IsA("ImageButton") then
+		local image = LOADING_IMAGES[math.random(1, #LOADING_IMAGES)]
+		state.LoadingImage.Image = image
+		return image
+	end
+	return nil
+end
+
+local function preloadLoadingImage(image)
+	if type(image) ~= "string" or image == "" then
+		return
+	end
+	pcall(function()
+		ContentProvider:PreloadAsync({ image })
+	end)
 end
 
 local function setPreloadState(ready)
@@ -130,6 +181,10 @@ local function collectAssetsFromInstances(assets, seen)
 			addAsset(instance.Texture)
 		elseif instance:IsA("MeshPart") then
 			addAsset(instance.TextureID)
+			addAsset(instance.MeshId)
+		elseif instance:IsA("SpecialMesh") then
+			addAsset(instance.MeshId)
+			addAsset(instance.TextureId)
 		elseif instance:IsA("SurfaceAppearance") then
 			addAsset(instance.ColorMap)
 			addAsset(instance.MetalnessMap)
@@ -165,12 +220,71 @@ local function collectAssetsFromInstances(assets, seen)
 	return assets
 end
 
-local function preloadAssets(assets)
-	local batchSize = 60
+local function resolveModelResource(modelRoot, resource)
+	if not modelRoot or type(resource) ~= "string" or resource == "" then
+		return nil
+	end
+	local current = modelRoot
+	for _, segment in ipairs(string.split(resource, "/")) do
+		if segment ~= "" then
+			current = current:FindFirstChild(segment)
+			if not current then
+				return nil
+			end
+		end
+	end
+	return current
+end
+
+local function collectPreloadInstances(instances, seenInstances)
+	if type(instances) ~= "table" then
+		return
+	end
+	seenInstances = seenInstances or {}
+	local function addInstance(instance)
+		if not instance or seenInstances[instance] then
+			return
+		end
+		seenInstances[instance] = true
+		table.insert(instances, instance)
+	end
+
+	local modelRoot = ReplicatedStorage:FindFirstChild("LBB")
+	local configModule = ReplicatedStorage:FindFirstChild("Config")
+	configModule = configModule and configModule:FindFirstChild("FigurineConfig")
+	if not modelRoot or not configModule then
+		return
+	end
+
+	local ok, config = pcall(require, configModule)
+	if not ok then
+		return
+	end
+
+	local list = config.Figurines or config
+	if type(list) ~= "table" then
+		return
+	end
+
+	for _, info in ipairs(list) do
+		local resource = info and (info.ModelResource or info.ModelName)
+		local source = resolveModelResource(modelRoot, resource)
+		if source then
+			addInstance(source)
+		end
+	end
+end
+
+local function preloadAssets(assets, onProgress)
+	local batchSize = 40
 	local total = #assets
 	if total <= 0 then
+		if onProgress then
+			onProgress(1, 1)
+		end
 		return true
 	end
+	local loaded = 0
 	for startIndex = 1, total, batchSize do
 		local batch = {}
 		for index = startIndex, math.min(total, startIndex + batchSize - 1) do
@@ -179,11 +293,20 @@ local function preloadAssets(assets)
 		local ok = pcall(function()
 			ContentProvider:PreloadAsync(batch)
 		end)
-		if not ok then
+		if ok then
+			loaded += #batch
+			if onProgress then
+				onProgress(loaded, total)
+			end
+		else
 			for _, asset in ipairs(batch) do
 				pcall(function()
 					ContentProvider:PreloadAsync({ asset })
 				end)
+				loaded += 1
+				if onProgress then
+					onProgress(loaded, total)
+				end
 			end
 		end
 	end
@@ -196,14 +319,19 @@ if script.Parent ~= ReplicatedFirst then
 end
 ReplicatedFirst:RemoveDefaultLoadingScreen()
 
-local loadingGui = createLoadingGui()
-
-local configAssets = {}
-local seen = {}
-collectAssetsFromConfigs(configAssets, seen)
-if #configAssets > 0 then
-	preloadAssets(configAssets)
+math.randomseed(os.clock() * 100000)
+local loadingState = resolveLoadingState()
+local selectedLoadingImage = nil
+if loadingState then
+	selectedLoadingImage = setRandomLoadingImage(loadingState)
+	setLoadingProgress(loadingState, 0)
+	setLoadingVisible(loadingState, true)
+	preloadLoadingImage(selectedLoadingImage)
 end
+
+local allAssets = {}
+local seen = {}
+collectAssetsFromConfigs(allAssets, seen)
 
 if not game:IsLoaded() then
 	game.Loaded:Wait()
@@ -211,14 +339,24 @@ end
 
 task.wait()
 
-local instanceAssets = {}
-collectAssetsFromInstances(instanceAssets, seen)
-if #instanceAssets > 0 then
-	preloadAssets(instanceAssets)
+collectAssetsFromInstances(allAssets, seen)
+collectPreloadInstances(allAssets, {})
+
+local function updateProgress(loaded, total)
+	if not loadingState then
+		return
+	end
+	if total <= 0 then
+		setLoadingProgress(loadingState, 1)
+		return
+	end
+	setLoadingProgress(loadingState, loaded / total)
 end
 
-if loadingGui then
-	loadingGui:Destroy()
+preloadAssets(allAssets, updateProgress)
+if loadingState then
+	setLoadingProgress(loadingState, 1)
+	setLoadingVisible(loadingState, false)
 end
 
 setPreloadState(true)

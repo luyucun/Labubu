@@ -17,6 +17,7 @@ local configFolder = ReplicatedStorage:WaitForChild("Config")
 local modulesFolder = ReplicatedStorage:WaitForChild("Modules")
 local CapsuleConfig = require(configFolder:WaitForChild("CapsuleConfig"))
 local BackpackVisibility = require(modulesFolder:WaitForChild("BackpackVisibility"))
+local GuiResolver = require(modulesFolder:WaitForChild("GuiResolver"))
 
 local function disableCoreBackpack()
 	local ok, err = pcall(function()
@@ -29,7 +30,11 @@ end
 
 disableCoreBackpack()
 
-local backpackGui = playerGui:WaitForChild("BackpackGui", 10)
+local backpackGui = GuiResolver.WaitForLayer(playerGui, { "BackpackGui", "BackpackGUI", "Backpack" }, {
+	"BackpackFrame",
+	"ItemListFrame",
+	"ArmyTemplate",
+}, 30)
 if not backpackGui then
 	warn("[BackpackDisplay] BackpackGui not found")
 	return

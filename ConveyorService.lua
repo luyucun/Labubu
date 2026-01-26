@@ -16,6 +16,21 @@ local CapsuleSpawnPoolConfig = require(ReplicatedStorage:WaitForChild("Config"):
 
 local EggService = require(script.Parent:WaitForChild("EggService"))
 
+local capsuleByQualityRarity = {}
+do
+	local list = CapsuleConfig.Capsules
+	if type(list) == "table" then
+		for _, info in ipairs(list) do
+			local quality = tonumber(info.Quality)
+			local rarity = tonumber(info.Rarity)
+			if quality and rarity then
+				capsuleByQualityRarity[quality] = capsuleByQualityRarity[quality] or {}
+				capsuleByQualityRarity[quality][rarity] = info
+			end
+		end
+	end
+end
+
 local ConveyorService = {}
 ConveyorService.__index = ConveyorService
 
@@ -30,6 +45,19 @@ local function getCapsuleFolder(conveyorFolder)
 		folder.Parent = conveyorFolder
 	end
 	return folder
+end
+
+local function refreshCapsuleBillboards(capsuleFolder, userId)
+	if not capsuleFolder then
+		return
+	end
+	for _, obj in ipairs(capsuleFolder:GetChildren()) do
+		if obj:IsA("Model") or obj:IsA("BasePart") then
+			if not userId or obj:GetAttribute("OwnerUserId") == userId then
+				EggService:RefreshCapsuleInfo(obj)
+			end
+		end
+	end
 end
 
 local function getCapsuleInfo(capsuleId)
@@ -54,16 +82,14 @@ local function getCapsuleInfo(capsuleId)
 	return nil
 end
 
-local function pickRandomCapsule(poolId)
-	local pool = CapsuleSpawnPoolConfig.GetPool(poolId)
-	if not pool then
-		warn(string.format("[ConveyorService] Spawn pool not found: %s", tostring(poolId)))
+local function pickWeightedEntry(list)
+	if type(list) ~= "table" or #list == 0 then
 		return nil
 	end
 
 	local totalWeight = 0
-	for _, entry in ipairs(pool) do
-		local weight = entry.Weight or 0
+	for _, entry in ipairs(list) do
+		local weight = tonumber(entry.Weight) or 0
 		if weight > 0 then
 			totalWeight += weight
 		end
@@ -74,28 +100,86 @@ local function pickRandomCapsule(poolId)
 
 	local roll = rng:NextNumber(0, totalWeight)
 	local acc = 0
-	for _, entry in ipairs(pool) do
-		local weight = entry.Weight or 0
+	for _, entry in ipairs(list) do
+		local weight = tonumber(entry.Weight) or 0
 		if weight > 0 then
 			acc += weight
 			if roll <= acc then
-				local capsuleInfo = getCapsuleInfo(entry.CapsuleId)
-				if not capsuleInfo then
-					warn(string.format("[ConveyorService] Capsule config missing: %s", tostring(entry.CapsuleId)))
-					return nil
-				end
-				return capsuleInfo
+				return entry
 			end
 		end
 	end
 
-	local lastEntry = pool[#pool]
-	if not lastEntry then
+	return list[#list]
+end
+
+local function getUnlockedPoolId(outputSpeed)
+	local defaultPoolId = tonumber(GameConfig.CapsuleSpawnPoolId) or 1
+	local unlocks = CapsuleSpawnPoolConfig.GetUnlocks and CapsuleSpawnPoolConfig.GetUnlocks()
+	if type(unlocks) ~= "table" or #unlocks == 0 then
+		return defaultPoolId
+	end
+
+	local speed = tonumber(outputSpeed) or 0
+	local bestPoolId = nil
+	local bestUnlockSpeed = nil
+	for _, entry in ipairs(unlocks) do
+		local unlockSpeed = tonumber(entry.UnlockOutputSpeed) or 0
+		local poolId = tonumber(entry.PoolId)
+		if poolId and unlockSpeed <= speed then
+			if not bestUnlockSpeed or unlockSpeed >= bestUnlockSpeed then
+				bestUnlockSpeed = unlockSpeed
+				bestPoolId = poolId
+			end
+		end
+	end
+
+	return bestPoolId or defaultPoolId
+end
+
+local function rollRarity()
+	local mutation = CapsuleSpawnPoolConfig.GetRarityMutation and CapsuleSpawnPoolConfig.GetRarityMutation()
+	local entry = pickWeightedEntry(mutation)
+	if not entry then
+		return 1
+	end
+	return tonumber(entry.Rarity) or 1
+end
+
+local function applyRarityMutation(baseCapsuleInfo)
+	if not baseCapsuleInfo then
 		return nil
 	end
-	local capsuleInfo = getCapsuleInfo(lastEntry.CapsuleId)
+
+	local quality = tonumber(baseCapsuleInfo.Quality)
+	if not quality then
+		return baseCapsuleInfo
+	end
+
+	local rarity = rollRarity()
+	local rarityTable = capsuleByQualityRarity[quality]
+	if not rarityTable then
+		return baseCapsuleInfo
+	end
+
+	return rarityTable[rarity] or rarityTable[1] or baseCapsuleInfo
+end
+
+local function pickRandomCapsule(poolId)
+	local pool = CapsuleSpawnPoolConfig.GetPool(poolId)
+	if not pool then
+		warn(string.format("[ConveyorService] Spawn pool not found: %s", tostring(poolId)))
+		return nil
+	end
+
+	local entry = pickWeightedEntry(pool)
+	if not entry then
+		return nil
+	end
+
+	local capsuleInfo = getCapsuleInfo(entry.CapsuleId)
 	if not capsuleInfo then
-		warn(string.format("[ConveyorService] Capsule config missing: %s", tostring(lastEntry.CapsuleId)))
+		warn(string.format("[ConveyorService] Capsule config missing: %s", tostring(entry.CapsuleId)))
 		return nil
 	end
 	return capsuleInfo
@@ -176,16 +260,21 @@ function ConveyorService:StartForPlayer(player, homeSlot)
 		return
 	end
 
+	local capsuleFolder = getCapsuleFolder(conveyorFolder)
+	refreshCapsuleBillboards(capsuleFolder, player.UserId)
+
 	local state = { Active = true }
 	running[player.UserId] = state
 
 	task.spawn(function()
 		while state.Active and player.Parent do
-			local capsuleInfo = pickRandomCapsule(GameConfig.CapsuleSpawnPoolId)
+			local poolId = getUnlockedPoolId(player:GetAttribute("OutputSpeed"))
+			local baseCapsuleInfo = pickRandomCapsule(poolId)
+			local capsuleInfo = applyRarityMutation(baseCapsuleInfo)
 			if capsuleInfo then
 				local model = EggService:CreateConveyorCapsule(capsuleInfo, player.UserId)
 				if model then
-					model.Parent = getCapsuleFolder(conveyorFolder)
+					model.Parent = capsuleFolder
 					moveCapsule(model, startCFrame, endCFrame)
 				else
 					warn(string.format("[ConveyorService] CreateConveyorCapsule returned nil for: %s", capsuleInfo.Name))

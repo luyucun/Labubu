@@ -13,14 +13,26 @@ local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 local modules = ReplicatedStorage:WaitForChild("Modules")
 local FormatHelper = require(modules:WaitForChild("FormatHelper"))
+local GuiResolver = require(modules:WaitForChild("GuiResolver"))
 
-local mainGui = playerGui:WaitForChild("MainGui", 10)
+local mainGui = GuiResolver.WaitForLayer(playerGui, { "MainGui", "MainGUI", "Main", "MainUI" }, {
+	"CoinNum",
+	"CoinBuff",
+	"Bag",
+	"Index",
+	"Home",
+}, 30)
 if not mainGui then
 	warn("[CoinDisplay] MainGui not found")
-	return
 end
 
-local coinLabel = mainGui:WaitForChild("CoinNum", 10)
+local coinLabel = nil
+if mainGui then
+	coinLabel = GuiResolver.FindDescendant(mainGui, "CoinNum", "TextLabel")
+end
+if not coinLabel then
+	coinLabel = GuiResolver.FindDescendant(playerGui, "CoinNum", "TextLabel")
+end
 if not coinLabel then
 	warn("[CoinDisplay] CoinNum not found")
 	return

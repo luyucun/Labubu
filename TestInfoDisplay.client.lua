@@ -13,8 +13,13 @@ local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 local modules = ReplicatedStorage:WaitForChild("Modules")
 local FormatHelper = require(modules:WaitForChild("FormatHelper"))
+local GuiResolver = require(modules:WaitForChild("GuiResolver"))
 
-local testGui = playerGui:WaitForChild("TestInfo", 10)
+local testGui = GuiResolver.WaitForLayer(playerGui, { "TestInfo", "TestInfoGui", "TestInfoGUI" }, {
+	"CapsuleTotal",
+	"OutoutSpeed",
+	"TimeTotal",
+}, 30)
 if not testGui then
 	warn("[TestInfoDisplay] TestInfo not found")
 	return

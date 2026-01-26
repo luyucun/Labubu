@@ -16,6 +16,7 @@ local configFolder = ReplicatedStorage:WaitForChild("Config")
 local modulesFolder = ReplicatedStorage:WaitForChild("Modules")
 local CapsuleConfig = require(configFolder:WaitForChild("CapsuleConfig"))
 local BackpackVisibility = require(modulesFolder:WaitForChild("BackpackVisibility"))
+local GuiResolver = require(modulesFolder:WaitForChild("GuiResolver"))
 
 local function getCapsuleInfo(capsuleId)
 	local normalizedId = tonumber(capsuleId) or capsuleId
@@ -72,19 +73,34 @@ local function collectCapsuleTools(container, list)
 	end
 end
 
-local mainGui = playerGui:WaitForChild("MainGui", 10)
+local mainGui = GuiResolver.WaitForLayer(playerGui, { "MainGui", "MainGUI", "Main", "MainUI" }, {
+	"CoinNum",
+	"CoinBuff",
+	"Bag",
+	"Index",
+	"Home",
+}, 30)
 if not mainGui then
 	warn("[BagDisplay] MainGui not found")
-	return
 end
 
-local bagButton = mainGui:WaitForChild("Bag", 10)
+local bagButton = nil
+if mainGui then
+	bagButton = GuiResolver.FindGuiButton(mainGui, "Bag")
+end
+if not bagButton then
+	bagButton = GuiResolver.FindGuiButton(playerGui, "Bag")
+end
 if not bagButton then
 	warn("[BagDisplay] MainGui.Bag not found")
 	return
 end
 
-local bagGui = playerGui:WaitForChild("Bag", 10)
+local bagGui = GuiResolver.WaitForLayer(playerGui, { "Bag", "BagGui", "BagGUI" }, {
+	"BagBg",
+	"CapsuleTemplate",
+	"TabList",
+}, 30)
 if not bagGui then
 	warn("[BagDisplay] Bag screen gui not found")
 	return
