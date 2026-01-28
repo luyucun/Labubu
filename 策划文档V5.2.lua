@@ -1430,3 +1430,219 @@ id	稀有度	权重
 1.在开启盲盒后，现在会播展示动画（先展示Result的那个过程）
 2.现在需要优化为：在初始的震动结束，要立刻展示出抽卡结果时，需要把GachaResult - Result - LightBg显示出来，显示出来的同时，要不断自转，这是一个光效，不断旋转形成闪闪发光的效果
 
+策划文档V5.1 更新一版数据表：
+
+盲盒刷新池子：
+Id	刷新池编号	盲盒id	权重
+10001	1	1001	4000
+10002	1	1002	1000
+10003	1	1003	400
+10004	1	1004	200
+10005	1	1005	100
+10006	1	1006	0
+10007	1	1007	0
+20001	2	1001	4000
+20002	2	1002	1500
+20003	2	1003	600
+20004	2	1004	300
+20005	2	1005	100
+20006	2	1006	30
+20007	2	1007	30
+30001	3	1001	4000
+30002	3	1002	1500
+30003	3	1003	800
+30004	3	1004	400
+30005	3	1005	150
+30006	3	1006	80
+30007	3	1007	50
+
+盲盒刷新池子解锁表：
+ID	刷新池编号	解锁产速
+1001	1	0
+1002	2	200
+1003	3	2000
+
+盲盒突变表：
+id	稀有度	权重
+1001	1	8275
+1002	2	1000
+1003	3	400
+1004	4	200
+1005	5	100
+
+盲盒表：
+Id	盲盒名字	盲盒品质	盲盒稀有度	盲盒模型名字	盲盒价格	开启倒计时（秒）	盲盒对应卡池	盲盒icon	盲盒展示图片	开发者商品id
+1001	Leaf	1	1	LeafCommon	50 	8	90001	rbxassetid://107877804846649	rbxassetid://98616255072587	3519967882
+1002	Water	2	1	WaterCommon	1500 	40	90002	rbxassetid://91134558890103	rbxassetid://98616255072587	3519968035
+1003	Lunar	3	1	LunarCommon	20000 	140	90003	rbxassetid://121158065949906	rbxassetid://98616255072587	3519968159
+1004	Solar	4	1	SolarCommon	180000 	480	90004	rbxassetid://123720993696670	rbxassetid://98616255072587	3519968449
+1005	Flame	5	1	FlameCommon	1200000 	1800	90005	rbxassetid://95224550415811	rbxassetid://98616255072587	3519968675
+1006	Heart	6	1	HeartCommon	5000000 	6600	90006	rbxassetid://127841276677202	rbxassetid://98616255072587	3519968812
+1007	Celestial	7	1	CelestialCommon	20000000 	19800	90007	rbxassetid://120738172280657	rbxassetid://98616255072587	3519968929
+2001	Leaf	1	2	LeafLight	100 	9	90001	rbxassetid://107877804846649	rbxassetid://98616255072587	3519969700
+2002	Water	2	2	WaterLight	3000 	44	90002	rbxassetid://91134558890103	rbxassetid://98616255072587	3519969830
+2003	Lunar	3	2	LunarLight	40000 	154	90003	rbxassetid://121158065949906	rbxassetid://98616255072587	3519969998
+2004	Solar	4	2	SolarLight	360000 	528	90004	rbxassetid://123720993696670	rbxassetid://98616255072587	3519970139
+2005	Flame	5	2	FlameLight	2400000 	1980	90005	rbxassetid://95224550415811	rbxassetid://98616255072587	3519970259
+2006	Heart	6	2	HeartLight	10000000 	7260	90006	rbxassetid://127841276677202	rbxassetid://98616255072587	3519970376
+2007	Celestial	7	2	CelestialLight	40000000 	21780	90007	rbxassetid://120738172280657	rbxassetid://98616255072587	3519970446
+3001	Leaf	1	3	LeafGold	300 	10	90001	rbxassetid://107877804846649	rbxassetid://98616255072587	3519971147
+3002	Water	2	3	WaterGold	9000 	50	90002	rbxassetid://91134558890103	rbxassetid://98616255072587	3519971264
+3003	Lunar	3	3	LunarGold	120000 	175	90003	rbxassetid://121158065949906	rbxassetid://98616255072587	3519971358
+3004	Solar	4	3	SolarGold	1080000 	600	90004	rbxassetid://123720993696670	rbxassetid://98616255072587	3519971507
+3005	Flame	5	3	FlameGold	7200000 	2250	90005	rbxassetid://95224550415811	rbxassetid://98616255072587	3519971613
+3006	Heart	6	3	HeartGold	30000000 	8250	90006	rbxassetid://127841276677202	rbxassetid://98616255072587	3519971705
+3007	Celestial	7	3	CelestialGold	120000000 	24750	90007	rbxassetid://120738172280657	rbxassetid://98616255072587	3519971799
+4001	Leaf	1	4	LeafDiamond	750 	12	90001	rbxassetid://107877804846649	rbxassetid://98616255072587	3519972281
+4002	Water	2	4	WaterDiamond	22500 	58	90002	rbxassetid://91134558890103	rbxassetid://98616255072587	3519972374
+4003	Lunar	3	4	LunarDiamond	300000 	203	90003	rbxassetid://121158065949906	rbxassetid://98616255072587	3519972453
+4004	Solar	4	4	SolarDiamond	2700000 	696	90004	rbxassetid://123720993696670	rbxassetid://98616255072587	3519972540
+4005	Flame	5	4	FlameDiamond	18000000 	2610	90005	rbxassetid://95224550415811	rbxassetid://98616255072587	3519972656
+4006	Heart	6	4	HeartDiamond	75000000 	9570	90006	rbxassetid://127841276677202	rbxassetid://98616255072587	3519972811
+4007	Celestial	7	4	CelestialDiamond	300000000 	28710	90007	rbxassetid://120738172280657	rbxassetid://98616255072587	3519972915
+5001	Leaf	1	5	LeafRainbow	2500 	14	90001	rbxassetid://107877804846649	rbxassetid://98616255072587	3519973404
+5002	Water	2	5	WaterRainbow	75000 	68	90002	rbxassetid://91134558890103	rbxassetid://98616255072587	3519973516
+5003	Lunar	3	5	LunarRainbow	1000000 	238	90003	rbxassetid://121158065949906	rbxassetid://98616255072587	3519973609
+5004	Solar	4	5	SolarRainbow	9000000 	816	90004	rbxassetid://123720993696670	rbxassetid://98616255072587	3519973732
+5005	Flame	5	5	FlameRainbow	60000000 	3060	90005	rbxassetid://95224550415811	rbxassetid://98616255072587	3519973805
+5006	Heart	6	5	HeartRainbow	250000000 	11220	90006	rbxassetid://127841276677202	rbxassetid://98616255072587	3519973900
+5007	Celestial	7	5	CelestialRainbow	1000000000 	33660	90007	rbxassetid://120738172280657	rbxassetid://98616255072587	3519973978
+
+手办卡池表：
+卡池id	手办id	刷新权重
+90001	10001	402
+90001	10002	213
+90001	10003	136
+90001	10004	92
+90001	10005	64
+90001	10006	44
+90001	10007	28
+90001	10008	16
+90001	10009	6
+90002	20001	402
+90002	20002	213
+90002	20003	136
+90002	20004	92
+90002	20005	64
+90002	20006	44
+90002	20007	28
+90002	20008	16
+90002	20009	6
+90003	30001	402
+90003	30002	213
+90003	30003	136
+90003	30004	92
+90003	30005	64
+90003	30006	44
+90003	30007	28
+90003	30008	16
+90003	30009	6
+90004	40001	402
+90004	40002	213
+90004	40003	136
+90004	40004	92
+90004	40005	64
+90004	40006	44
+90004	40007	28
+90004	40008	16
+90004	40009	6
+90005	50001	433
+90005	50002	225
+90005	50003	142
+90005	50004	95
+90005	50005	64
+90005	50006	42
+90005	50007	26
+90006	60001	433
+90006	60002	225
+90006	60003	142
+90006	60004	95
+90006	60005	64
+90006	60006	42
+90006	60007	26
+90007	70001	468
+90007	70002	236
+90007	70003	144
+90007	70004	93
+90007	70005	60
+
+
+策划文档V5.2 养成系统
+
+概述：我们在游戏中要加入一个养成系统，玩家通过在游戏内达成各种各样的成就，来实现各个维度的养成
+
+详细规则：
+1.我们设定以下一些养成维度类型：
+    a.可放置的盲盒数+1：当前的可放置的盲盒数是受限制的，当每完成一个这个维度，就把盲盒可放置数+1
+    b.整体盲盒开启倒计时减少x%：当前每个盲盒都有自己的开启时间，当获得这个维度的养成后，就将开启倒计时设定为原定时间*（1-x%），注意：这里如果有多个养成，取最大的，比如A任务完成奖励减少10%，B任务完成奖励减少15%，则最终盲盒减少时间是15%（取最大值）
+    c.整体金币产速速度+x%
+        1）这里的产速加成是算在某个手办最终的产速计算后，再进行加成，比如最终产速=手办算出来的产速*（1+x%），如果玩家购买了之前的开发者道具直接购买倍率，则倍率乘在这个外围
+        2）版本到目前位置的最终产速：最终金币产速=基础产速*稀有度系数*（1+（等级-1）*品质系数）*（1+养成加成）*购买倍率
+        3）注意这里的金币产速加成，如果有多个，取最高值，比如共3个奖励，分别奖励产速+5%，+10%，+15%，则最终按15%算
+    d.额外好运*x
+        1）额外好运是一个百分数值，是指在打开盲盒时，有一定的几率变成更好的一个卡牌，这个根据手办的基础阶级来判断即可
+        2）比如这个数值是25%，也就是开启一个盲盒时，比如开的是1001这个手办，则在开启时有25%的几率变成1002
+        3）我会在手办表中给每个手办添加一个基础阶级，比如开了一个基础阶级是3的手办，有几率变成4，但是不会变成5及以上
+        4）如果开启的时候直接是最高的阶级了，那就不执行这个逻辑
+    e.离线时间上限增加x分钟
+        1）目前我们的离线产出经验还没设定上限，在这里，我们需要先补一个离线产出上限，设定2小时，也就是玩家离线2小时以上，那么离线产出最多产出2小时
+        2）通过这个维度我们可以延长这个时间，也是多个数值时取最大的数值
+    f.品质1盲盒突变率提升x%
+        1）我们的盲盒在生成时，会根据权重决定本次盲盒生成的稀有度是什么
+        2）这个概率是：在确定了稀有度后，再执行一次突变概率，有一定的概率，变成更高一级稀有度的盲盒，比如稀有度1的盲盒生成时，有25%的几率，变成稀有度2的盲盒生成出来
+        3）每个独立运行，这个只生效给品质1的盲盒生成时去突变
+    g.品质2盲盒突变率提升x%
+    h.品质3盲盒突变率提升x%
+    i.品质4盲盒突变率提升x%
+
+
+2.我们需要设定一些成就类型，达成这些成就条件，来获得对应的养成维度
+    a.累计游戏时长达到X分钟,用目前游戏内已经做好的累计时长数值即可
+    b.累计开启X个盲盒，这里不分类型，只要是盲盒即可，每开启一个盲盒，计数就+1
+    c.累计打开个Leaf盲盒，注意这里不论稀有度，只要是品质1的盲盒就行，稀有度1品质1的盲盒打开和稀有度3品质1的盲盒打开都是计数+1
+    d.累计打开X个Water盲盒
+    e.累计打开x个Lunar盲盒
+    f.累计打开x个Solar盲盒
+    g.累计打开X个Flame盲盒
+    h.累计打开x个heart盲盒
+    i.累计打开x个Celestial盲盒
+    j.收集Leaf盲盒中的所有手办:注意这里不管稀有度，只管有就行
+    k.收集Water盲盒中的所有手办:注意这里不管稀有度，只管有就行
+    l.收集Lunar盲盒中的所有手办:注意这里不管稀有度，只管有就行
+    m.收集Solar盲盒中的所有手办:注意这里不管稀有度，只管有就行
+    n.收集Flame盲盒中的所有手办:注意这里不管稀有度，只管有就行
+    o.收集heart盲盒中的所有手办:注意这里不管稀有度，只管有就行
+    p.收集Celestial盲盒中的所有手办:注意这里不管稀有度，只管有就行
+    q.累计打开X个品质2的盲盒，任何品质的都可以，稀有度是2就行
+    r.累计打开X个品质3的盲盒，任何品质的都可以，稀有度是3就行
+    s.累计打开X个品质4的盲盒，任何品质的都可以，稀有度是4就行
+    t.累计打开X个品质5的盲盒，任何品质的都可以，稀有度是5就行
+
+
+3.在每个成就达成时，我们会给玩家发放一份奖励，基本就是奖励一些钻石，所以我们需要增加一套货币：钻石，这个需要你来实现
+
+以下是一些客户端相关规则：
+
+1.玩家点击StarterGui - MainGui - Progression按钮，可以打开养成界面（把StarterGui - Progression - ProgressionBg的Visible属性改成True），点击StarterGui - Progression - ProgressionBg - Title - CloseButton可以关闭界面，注意这里点击按钮要有通用的按钮点击效果
+2.我们的每个成就，都需要在ui列表中显示出来，我做了一个模板，打开游戏时，立刻生成所有的成就的模板，并同步玩家当前的进度
+3.StarterGui - Progression - ProgressionBg - ScrollingFrame - CapsuleTemplate就是我们的模板，默认是隐藏的，所以每次复制出来一个信息时都要把复制出来的元素的visible属性改成true显示出来
+4.ProgressionBg - ScrollingFrame - CapsuleTemplate - Icon是成就图标，在配置表中读取对应的配置即可
+5.ProgressionBg - ScrollingFrame - CapsuleTemplate - Name是textlabel，去读取配置表中的成就文本这个字段即可
+6.ProgressionBg - ScrollingFrame - CapsuleTemplate - Reward是textlabel，去读取配置表中的奖励文本这个字段即可
+7.ProgressionBg - ScrollingFrame - CapsuleTemplate - Progress是textlabel，用于显示当前这个成就的完成进度，格式是x/y,X是当前的值，Y是目标值，Y就去读配置表中的达成条件这个数值即可，注意：如果类型是游戏时长的，Y固定就是1，达成条件就是1/1,未达成就是0/1即可
+8.达成条件后，我们会奖励钻石。如果奖励达成后，需要把ProgressionBg - ScrollingFrame - CapsuleTemplate -Bg以及ProgressionBg - ScrollingFrame - CapsuleTemplate -Diamond以及ProgressionBg - ScrollingFrame - CapsuleTemplate - RedPoint这三个的visible属性改成True
+9.有未领取的钻石奖励时，需要给ProgressionBg - ScrollingFrame - CapsuleTemplate -Diamond做个小动效，隔1秒就抖动一下，注意是中心不动，左右摆动那种就行，看起来像抖了一下
+10.玩家点击ProgressionBg - ScrollingFrame - CapsuleTemplate -Diamond，可以领取钻石
+11.玩家领取了钻石后，需要把ProgressionBg - ScrollingFrame - CapsuleTemplate -Bg以及ProgressionBg - ScrollingFrame - CapsuleTemplate -Diamond以及ProgressionBg - ScrollingFrame - CapsuleTemplate - RedPoint这三个的visible属性改成Visible属性改成false
+12.领取了钻石后，需要把ProgressionBg - ScrollingFrame - CapsuleTemplate - Progress的文本改成：Active
+13.当有未领取的钻石奖励时，需要把StarterGui - MainGui - Progression - RedPoint的visible属性改成True，没有可领取的奖励时再隐藏
+14.玩家领取钻石奖励时，需要播放领取动画，具体逻辑是：
+    1）将StarterGui - ClaimTipsGui - ClaimSuccessful的Visible属性设置成True（这里需要做一个出现动画，从屏幕左边滑出来）
+    2）将StarterGui - ClaimTipsGui - ClaimSuccessful - Bg - ItemListFrame - ItemTemplate的Visible属性改成True，要等上面一条滑动完成后再出现
+    3）ItemTemplate - Icon是奖励图标，换成钻石图标资源即可，ItemTemplate - Number是奖励数量，换成钻石奖励的数量即可
+    4）整个流程出现后，在屏幕上0.5秒内无法关闭，过了0.5秒后玩家点击屏幕任意区域即可关闭弹框
+    5）在StarterGui - ClaimTipsGui - ClaimSuccessful出现完成后，需要把StarterGui - ClaimTipsGui - LightBg的visible属性也改成True，然后让LightBg不断自转
+    6）关闭界面时把LightBg和ClaimSuccessful的visible属性全部设定成false即可
+
+关于数据表：
+我把我的这一块的数据表放在这个文件中："D:\RobloxGame\Labubu\Labubu\临时数据表.lua"，你直接读取即可

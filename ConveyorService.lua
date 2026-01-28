@@ -15,6 +15,7 @@ local CapsuleConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForCh
 local CapsuleSpawnPoolConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("CapsuleSpawnPoolConfig"))
 
 local EggService = require(script.Parent:WaitForChild("EggService"))
+local ProgressionService = require(script.Parent:WaitForChild("ProgressionService"))
 
 local capsuleByQualityRarity = {}
 do
@@ -165,6 +166,29 @@ local function applyRarityMutation(baseCapsuleInfo)
 	return rarityTable[rarity] or rarityTable[1] or baseCapsuleInfo
 end
 
+local function applyExtraMutation(player, capsuleInfo)
+	if not capsuleInfo or not ProgressionService then
+		return capsuleInfo
+	end
+	local rarity = tonumber(capsuleInfo.Rarity) or 0
+	if rarity <= 0 or rarity >= 5 then
+		return capsuleInfo
+	end
+	local chance = ProgressionService:GetRarityUpgradeChance(player, rarity)
+	if chance <= 0 then
+		return capsuleInfo
+	end
+	if rng:NextNumber() > chance then
+		return capsuleInfo
+	end
+	local quality = tonumber(capsuleInfo.Quality) or 0
+	local rarityTable = capsuleByQualityRarity[quality]
+	if not rarityTable then
+		return capsuleInfo
+	end
+	return rarityTable[rarity + 1] or capsuleInfo
+end
+
 local function pickRandomCapsule(poolId)
 	local pool = CapsuleSpawnPoolConfig.GetPool(poolId)
 	if not pool then
@@ -271,6 +295,9 @@ function ConveyorService:StartForPlayer(player, homeSlot)
 			local poolId = getUnlockedPoolId(player:GetAttribute("OutputSpeed"))
 			local baseCapsuleInfo = pickRandomCapsule(poolId)
 			local capsuleInfo = applyRarityMutation(baseCapsuleInfo)
+			if capsuleInfo then
+				capsuleInfo = applyExtraMutation(player, capsuleInfo)
+			end
 			if capsuleInfo then
 				local model = EggService:CreateConveyorCapsule(capsuleInfo, player.UserId)
 				if model then

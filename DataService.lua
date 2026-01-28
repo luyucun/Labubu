@@ -20,12 +20,14 @@ DataService.__index = DataService
 
 local store = DataStoreService:GetDataStore(GameConfig.DataStoreName)
 local sessionData = {} -- [userId] = {Data = table, Dirty = bool, LastSave = number}
+local playtimeListeners = {}
 local autoSaveStarted = false
 local PLAYTIME_UPDATE_INTERVAL = 1
 
 local function defaultData()
 	return {
 		Coins = GameConfig.StartCoins,
+		Diamonds = 0,
 		Figurines = {},
 		FigurineStates = {},
 		Eggs = {},
@@ -38,6 +40,8 @@ local function defaultData()
 		AutoCollect = false,
 		MusicEnabled = true,
 		SfxEnabled = true,
+		ProgressionClaimed = {},
+		LastLogoutTime = 0,
 	}
 end
 
@@ -197,6 +201,36 @@ local function normalizeCount(value)
 	return math.floor(num)
 end
 
+local function normalizeDiamonds(value)
+	local num = tonumber(value)
+	if not num or num < 0 then
+		return 0
+	end
+	return math.floor(num)
+end
+
+local function normalizeProgressionClaimed(value)
+	if type(value) ~= "table" then
+		return {}
+	end
+	local normalized = {}
+	for key, claimed in pairs(value) do
+		local id = tonumber(key) or key
+		if id and claimed == true then
+			normalized[id] = true
+		end
+	end
+	return normalized
+end
+
+local function normalizeLogoutTime(value)
+	local num = tonumber(value)
+	if not num or num < 0 then
+		return 0
+	end
+	return math.floor(num)
+end
+
 local function normalizeOutputSpeed(value)
 	local num = tonumber(value)
 	if not num or num < 0 then
@@ -275,7 +309,7 @@ local function normalizeCapsuleOpenById(stats)
 	return normalized, total, changed
 end
 
-local function calculateOutputSpeed(figurines, figurineStates)
+local function calculateOutputSpeed(figurines, figurineStates, bonus)
 	if type(figurines) ~= "table" then
 		return 0
 	end
@@ -292,7 +326,11 @@ local function calculateOutputSpeed(figurines, figurineStates)
 			end
 		end
 	end
-	return total
+	local bonusFactor = 1 + (tonumber(bonus) or 0)
+	if bonusFactor < 0 then
+		bonusFactor = 0
+	end
+	return total * bonusFactor
 end
 
 local function adjustCollectTimesForMultiplierChange(player, oldMultiplier, newMultiplier)
@@ -375,6 +413,12 @@ local function applyCoinsAttribute(player, coins)
 	end
 end
 
+local function applyDiamondsAttribute(player, diamonds)
+	if player and player.Parent then
+		player:SetAttribute("Diamonds", diamonds)
+	end
+end
+
 local function applyStatsAttributes(player, data)
 	if not player or not player.Parent then
 		return
@@ -386,6 +430,7 @@ local function applyStatsAttributes(player, data)
 	player:SetAttribute("AutoCollect", data.AutoCollect == true)
 	player:SetAttribute("MusicEnabled", data.MusicEnabled == true)
 	player:SetAttribute("SfxEnabled", data.SfxEnabled == true)
+	player:SetAttribute("Diamonds", normalizeDiamonds(data.Diamonds))
 end
 
 local function ensureFigurineOwnedFolder(player)
@@ -467,6 +512,14 @@ local function updatePlaytimeRecord(record, player)
 	if player and player.Parent then
 		player:SetAttribute("TotalPlayTime", total)
 	end
+	if #playtimeListeners > 0 and player and player.Parent then
+		for _, callback in ipairs(playtimeListeners) do
+			local ok, err = pcall(callback, player, total)
+			if not ok then
+				warn(string.format("[DataService] Playtime listener error: %s", tostring(err)))
+			end
+		end
+	end
 end
 
 function DataService:LoadPlayer(player)
@@ -489,6 +542,16 @@ function DataService:LoadPlayer(player)
 	if data.Coins == nil then
 		data.Coins = GameConfig.StartCoins
 		needsSave = true
+	end
+	if data.Diamonds == nil then
+		data.Diamonds = 0
+		needsSave = true
+	else
+		local normalizedDiamonds = normalizeDiamonds(data.Diamonds)
+		if data.Diamonds ~= normalizedDiamonds then
+			data.Diamonds = normalizedDiamonds
+			needsSave = true
+		end
 	end
 	if type(data.Figurines) ~= "table" then
 		data.Figurines = {}
@@ -542,6 +605,24 @@ function DataService:LoadPlayer(player)
 		end
 	end
 
+	if type(data.ProgressionClaimed) ~= "table" then
+		data.ProgressionClaimed = {}
+		needsSave = true
+	else
+		data.ProgressionClaimed = normalizeProgressionClaimed(data.ProgressionClaimed)
+	end
+
+	if data.LastLogoutTime == nil then
+		data.LastLogoutTime = 0
+		needsSave = true
+	else
+		local normalizedLogout = normalizeLogoutTime(data.LastLogoutTime)
+		if data.LastLogoutTime ~= normalizedLogout then
+			data.LastLogoutTime = normalizedLogout
+			needsSave = true
+		end
+	end
+
 
 	local normalizedPlaytime = normalizeCount(data.TotalPlayTime)
 	if data.TotalPlayTime ~= normalizedPlaytime then
@@ -565,7 +646,7 @@ function DataService:LoadPlayer(player)
 		needsSave = true
 	end
 
-	local recalculatedSpeed = calculateOutputSpeed(data.Figurines, data.FigurineStates)
+	local recalculatedSpeed = calculateOutputSpeed(data.Figurines, data.FigurineStates, 0)
 		* normalizeOutputMultiplier(data.OutputMultiplier)
 	local normalizedSpeed = normalizeOutputSpeed(data.OutputSpeed)
 	if normalizedSpeed ~= recalculatedSpeed then
@@ -579,6 +660,7 @@ function DataService:LoadPlayer(player)
 		Data = data,
 		Dirty = needsSave,
 		LastSave = os.clock(),
+		ProgressionOutputBonus = 0,
 		PlaytimeActive = true,
 		LastPlaytimeUpdate = os.time(),
 		PlaytimeLoop = false,
@@ -600,6 +682,57 @@ end
 function DataService:GetCoins(player)
 	local record = sessionData[player.UserId]
 	return record and record.Data.Coins or 0
+end
+
+function DataService:GetDiamonds(player)
+	local record = sessionData[player.UserId]
+	return record and record.Data.Diamonds or 0
+end
+
+function DataService:GetProgressionClaimed(player)
+	local record = sessionData[player.UserId]
+	if not record then
+		return {}
+	end
+	if type(record.Data.ProgressionClaimed) ~= "table" then
+		record.Data.ProgressionClaimed = {}
+	end
+	return record.Data.ProgressionClaimed
+end
+
+function DataService:IsAchievementClaimed(player, achievementId)
+	local record = sessionData[player.UserId]
+	if not record then
+		return false
+	end
+	local id = tonumber(achievementId) or achievementId
+	if not id then
+		return false
+	end
+	if type(record.Data.ProgressionClaimed) ~= "table" then
+		return false
+	end
+	return record.Data.ProgressionClaimed[id] == true
+end
+
+function DataService:SetAchievementClaimed(player, achievementId, claimed)
+	local record = sessionData[player.UserId]
+	if not record then
+		return
+	end
+	if type(record.Data.ProgressionClaimed) ~= "table" then
+		record.Data.ProgressionClaimed = {}
+	end
+	local id = tonumber(achievementId) or achievementId
+	if not id then
+		return
+	end
+	if claimed then
+		record.Data.ProgressionClaimed[id] = true
+	else
+		record.Data.ProgressionClaimed[id] = nil
+	end
+	record.Dirty = true
 end
 
 function DataService:GetOutputMultiplier(player)
@@ -661,6 +794,13 @@ function DataService:SetAutoCollect(player, enabled)
 	end
 end
 
+function DataService:RegisterPlaytimeListener(callback)
+	if type(callback) ~= "function" then
+		return
+	end
+	table.insert(playtimeListeners, callback)
+end
+
 function DataService:SetAudioSettings(player, musicEnabled, sfxEnabled)
 	local record = sessionData[player.UserId]
 	if not record then
@@ -708,6 +848,31 @@ function DataService:SetOutputMultiplier(player, multiplier)
 	if player and player.Parent then
 		player:SetAttribute("OutputMultiplier", normalized)
 	end
+	self:RecalculateOutputSpeed(player)
+	return normalized
+end
+
+function DataService:GetProgressionOutputBonus(player)
+	local record = sessionData[player.UserId]
+	if not record then
+		return 0
+	end
+	return tonumber(record.ProgressionOutputBonus) or 0
+end
+
+function DataService:SetProgressionOutputBonus(player, bonus)
+	local record = sessionData[player.UserId]
+	if not record then
+		return 0
+	end
+	local normalized = tonumber(bonus) or 0
+	if normalized < 0 then
+		normalized = 0
+	end
+	if record.ProgressionOutputBonus == normalized then
+		return normalized
+	end
+	record.ProgressionOutputBonus = normalized
 	self:RecalculateOutputSpeed(player)
 	return normalized
 end
@@ -973,6 +1138,17 @@ function DataService:SetCoins(player, amount)
 	applyCoinsAttribute(player, amount)
 end
 
+function DataService:SetDiamonds(player, amount)
+	local record = sessionData[player.UserId]
+	if not record then
+		return
+	end
+	local normalized = normalizeDiamonds(amount)
+	record.Data.Diamonds = normalized
+	record.Dirty = true
+	applyDiamondsAttribute(player, normalized)
+end
+
 function DataService:AddCoins(player, delta)
 	local record = sessionData[player.UserId]
 	if not record then
@@ -982,6 +1158,18 @@ function DataService:AddCoins(player, delta)
 	record.Data.Coins = newValue
 	record.Dirty = true
 	applyCoinsAttribute(player, newValue)
+	return newValue
+end
+
+function DataService:AddDiamonds(player, delta)
+	local record = sessionData[player.UserId]
+	if not record then
+		return
+	end
+	local newValue = normalizeDiamonds(record.Data.Diamonds + (tonumber(delta) or 0))
+	record.Data.Diamonds = newValue
+	record.Dirty = true
+	applyDiamondsAttribute(player, newValue)
 	return newValue
 end
 
@@ -1025,7 +1213,7 @@ function DataService:RecalculateOutputSpeed(player)
 	if not record then
 		return 0
 	end
-	local total = calculateOutputSpeed(record.Data.Figurines, record.Data.FigurineStates)
+	local total = calculateOutputSpeed(record.Data.Figurines, record.Data.FigurineStates, record.ProgressionOutputBonus)
 		* normalizeOutputMultiplier(record.Data.OutputMultiplier)
 	if record.Data.OutputSpeed ~= total then
 		record.Data.OutputSpeed = total
@@ -1067,6 +1255,62 @@ function DataService:StopPlaytimeTracker(player)
 	updatePlaytimeRecord(record, player)
 end
 
+function DataService:ApplyOfflineCap(player, capSeconds)
+	local record = sessionData[player.UserId]
+	if not record then
+		return
+	end
+	local data = record.Data
+	local lastLogout = normalizeLogoutTime(data.LastLogoutTime)
+	if lastLogout <= 0 then
+		return
+	end
+	local limit = tonumber(capSeconds) or 0
+	if limit <= 0 then
+		return
+	end
+	local now = os.time()
+	local offlineSeconds = now - lastLogout
+	if offlineSeconds <= limit then
+		return
+	end
+	local excess = offlineSeconds - limit
+	if excess <= 0 then
+		return
+	end
+	if type(data.FigurineStates) ~= "table" then
+		return
+	end
+	local changed = false
+	for _, state in pairs(data.FigurineStates) do
+		if type(state) == "table" then
+			local lastCollect = tonumber(state.LastCollectTime)
+			if lastCollect and lastCollect > 0 and lastCollect <= lastLogout then
+				local adjusted = lastCollect + excess
+				if adjusted > now then
+					adjusted = now
+				end
+				if adjusted ~= lastCollect then
+					state.LastCollectTime = adjusted
+					changed = true
+				end
+			end
+		end
+	end
+	if changed then
+		record.Dirty = true
+	end
+end
+
+function DataService:MarkLogoutTime(player)
+	local record = sessionData[player.UserId]
+	if not record then
+		return
+	end
+	record.Data.LastLogoutTime = os.time()
+	record.Dirty = true
+end
+
 function DataService:ResetPlayerData(player)
 	local userId = player.UserId
 	local data = defaultData()
@@ -1077,11 +1321,13 @@ function DataService:ResetPlayerData(player)
 		record.Dirty = true
 		record.LastSave = os.clock()
 		record.LastPlaytimeUpdate = os.time()
+		record.ProgressionOutputBonus = 0
 	else
 		sessionData[userId] = {
 			Data = data,
 			Dirty = true,
 			LastSave = os.clock(),
+			ProgressionOutputBonus = 0,
 			PlaytimeActive = true,
 			LastPlaytimeUpdate = os.time(),
 			PlaytimeLoop = false,
@@ -1130,6 +1376,7 @@ end
 
 function DataService:UnloadPlayer(player, force)
 	self:StopPlaytimeTracker(player)
+	self:MarkLogoutTime(player)
 	self:SavePlayer(player, force)
 	sessionData[player.UserId] = nil
 end

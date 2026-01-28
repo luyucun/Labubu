@@ -27,6 +27,7 @@ ReplicatedStorage/
 - Config/FigurinePoolConfig（手办卡池配置）
 - Config/FigurineRateConfig（手办产速系数）
 - Config/QualityConfig（品质图标配置）
+- Config/ProgressionConfig（养成/成就配置）
 - OpenProgresTemplate（盲盒开启进度UI模板）
 - CapsuleInfo（盲盒信息BillboardGui模板）
 - Modules/FormatHelper（数值格式化）
@@ -48,6 +49,7 @@ ServerScriptService/
 - Server/EggService: 盲盒购买/背包/放置/倒计时
 - Server/FigurineService: 盲盒开盒随机手办/展台摆放/待领取产币与领取触发
 - Server/ClaimService: 领取全部/十倍领取/自动领取/付费买币
+- Server/ProgressionService: 养成/成就进度计算、钻石奖励领取、养成加成生效与同步
 - Server/LeaderboardService: 服务器内排行榜（总产速/总游戏时间）
 - Server/FriendBonusService: 同服好友加成统计与属性同步
 - Server/GlobalLeaderboardService: 全局排行榜数据维护与刷新推送
@@ -62,6 +64,7 @@ StarterPlayer/StarterPlayerScripts/
 - UI/BackpackDisplay: 自定义背包UI显示与装备交互
 - UI/BagDisplay: 盲盒背包总览界面显示与筛选
 - UI/IndexDisplay: 手办索引界面显示与筛选/检视入口
+- UI/ProgressionDisplay: 养成成就界面显示/领奖动画/红点提示
 - UI/TestInfoDisplay: 统计测试UI显示
 - UI/ErrorHint: 统一错误提示显示
 - UI/GachaResult: 抽卡结果表现与升级进度动画
@@ -100,6 +103,7 @@ Workspace/
 3. 关键数据结构（服务端持久化）
 PlayerData
 - Coins: number
+- Diamonds: number
 - TotalPlayTime: number
 - CapsuleOpenTotal: number
 - CapsuleOpenById: { [CapsuleId] = number }
@@ -108,6 +112,7 @@ PlayerData
 - AutoCollect: boolean
 - MusicEnabled: boolean
 - SfxEnabled: boolean
+- ProgressionClaimed: { [AchievementId] = true }
 - Eggs: { {Uid, EggId} }  -- 背包内的蛋
 - PlacedEggs: { {Uid, EggId, HatchEndTime, Position, Rotation, IsLocal} } -- Position/Rotation为相对IdleFloor的本地坐标
 - Figurines: { [FigurineId] = true }
@@ -133,6 +138,7 @@ PlayerData
 - FriendBonusCount: number
 - FriendBonusPercent: number
 - OutputMultiplier: number
+- Diamonds: number
 
 4. 核心系统职责
 - DataService：会话缓存 + Dirty 标记 + 间隔保存 + BindToClose 兜底，UpdateAsync 持久化，离线结算，统计(在线时长/盲盒开启/总产出速度)，手办升级数据管理
@@ -154,7 +160,7 @@ PlayerData
 - 购买蛋：客户端点击 -> 服务端校验(归属/距离/金币/冷却) -> 扣费 -> 入背包 -> 移除蛋
 - 放置蛋：客户端请求 -> 校验位置(在自家地板内/格位) -> 数量上限(MaxPlacedCapsules) -> 占用检测 -> 生成模型 -> 设置HatchEndTime
 - 付费开盲盒：倒计时阶段触发开发者商品购买，完成后直接开盒；若倒计时已结束则改走普通开盒交互
-- 开蛋：校验孵化完成 -> 按卡池权重随机手办 -> 下发OpenEggResult -> 客户端抽卡表现 -> 新卡延迟升台与镜头聚焦 -> 开始产币
+- 开蛋：校验孵化完成 -> 按卡池权重随机手办 -> 下发OpenEggResult -> 客户端抽卡表现 -> NotifyGachaFinished -> 新卡升台与镜头聚焦 -> 开始产币
 - Home按钮：客户端请求GoHome -> 服务端校验归属 -> 传送回基地出生点
 - 产币与收取：服务端按 LastCollectTime 结算，触碰领取按钮收取并清零累计
 - 领取全部/十倍领取：触碰触发开发者道具购买 -> 统一结算未领取金币 -> 更新各手办 LastCollectTime
@@ -166,8 +172,8 @@ PlayerData
 - 版本不同步：客户端检测版本缺口 -> RequestResync -> 服务端下发全量快照
 
 6. 产币计算与限制（可调）
-- rate = baseRate * RarityCoeff * (1 + (Level - 1) * QualityCoeff) * OutputMultiplier * (1 + 0.1 * FriendCount)
-- OfflineCapSeconds 由配置控制，超出部分不计
+ - rate = baseRate * RarityCoeff * (1 + (Level - 1) * QualityCoeff) * (1 + ProgressionBonus) * OutputMultiplier * (1 + 0.1 * FriendCount)
+ - OfflineCapSeconds = GameConfig.OfflineCapSeconds + 养成离线上限加成分钟*60
 - FigurineCoinCapSeconds 控制单个手办未领取累计上限时长
 - 在线收取：按 now - LastCollectTime 结算，不受离线封顶
 - 离线结算：按 min(离线时长, OfflineCapSeconds) 结算并写入 PendingCoins
@@ -184,8 +190,10 @@ PlayerData
 - 传送带盲盒刷新时挂载 CapsuleInfo BillboardGui，显示名称/价格/稀有度/品质颜色
 - 手办模型展示时按稀有度切换Seat1~Seat5透明度，并在PartLbb挂载稀有度特效
 - 开盲盒结果通过OpenEggResult驱动抽卡界面与升级进度动画
+- 抽卡动画结束后通知 NotifyGachaFinished，服务端再触发新卡升台与镜头聚焦
 - 抽卡结果播放前等待 AssetsPreloaded，并预加载本次盲盒/手办图标
 - Index列表的CheckIcon进入Check检视界面，ViewportFrame展示手办并支持拖拽旋转（+/-30）
+- Progression按钮打开养成界面，红点提示可领取奖励，ClaimTipsGui播放钻石领取动画
 - 禁用系统背包，背包UI基于工具列表渲染，点击条目装备盲盒
 - 币数展示可基于 ServerTime + PendingCoins 推算，仅作表现
 - CoinNum 从玩家属性 Coins 同步显示，格式遵循 FormatHelper 大数值规则

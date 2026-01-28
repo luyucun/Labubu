@@ -11,6 +11,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local GameConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("GameConfig"))
 local DataService = require(script.Parent:WaitForChild("DataService"))
+local ProgressionService = require(script.Parent:WaitForChild("ProgressionService"))
 local EggService = require(script.Parent:WaitForChild("EggService"))
 local FigurineService = require(script.Parent:WaitForChild("FigurineService"))
 local HomeService = require(script.Parent:WaitForChild("HomeService"))
@@ -63,10 +64,14 @@ Players.CharacterAutoLoads = false
 HomeService:Init()
 ClaimService:Init()
 DataService:StartAutoSave()
+ProgressionService:Init()
 FriendBonusService:Init()
 GlobalLeaderboardService:Init()
 
 game:BindToClose(function()
+	for _, player in ipairs(Players:GetPlayers()) do
+		DataService:MarkLogoutTime(player)
+	end
 	DataService:SaveAll(true)
 end)
 
@@ -95,6 +100,7 @@ local function handlePlayerAdded(player)
 
 	DataService:LoadPlayer(player)
 	print("[Bootstrap] DataService:LoadPlayer done")
+	ProgressionService:BindPlayer(player)
 	LeaderboardService:BindPlayer(player)
 	GlobalLeaderboardService:BindPlayer(player)
 
@@ -134,6 +140,7 @@ Players.PlayerRemoving:Connect(function(player)
 	ClaimService:UnbindPlayer(player)
 	LeaderboardService:UnbindPlayer(player)
 	GlobalLeaderboardService:UnbindPlayer(player)
+	ProgressionService:UnbindPlayer(player)
 	FriendBonusService:HandlePlayerRemoving(player)
 	DataService:UnloadPlayer(player, true)
 	HomeService:ReleaseHome(player)

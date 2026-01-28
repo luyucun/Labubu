@@ -2,7 +2,7 @@
 脚本名称: GachaResult
 脚本类型: LocalScript
 脚本位置: StarterPlayer/StarterPlayerScripts/UI/GachaResult
-版本: V3.0
+版本: V3.2
 职责: 开盲盒结果界面与翻面/升级表现
 ]]
 
@@ -137,15 +137,56 @@ local function formatSpeedText(speed)
 	return string.format("%s/S", FormatHelper.FormatCoinsShort(speed, true))
 end
 
+local function resolveGuiObject(target)
+	if not target then
+		return nil
+	end
+	if target:IsA("GuiObject") then
+		return target
+	end
+	return target:FindFirstChildWhichIsA("GuiObject", true)
+end
+
+local function resolveImageTarget(target)
+	if not target then
+		return nil
+	end
+	if target:IsA("ImageLabel") or target:IsA("ImageButton") then
+		return target
+	end
+	return target:FindFirstChildWhichIsA("ImageLabel", true)
+		or target:FindFirstChildWhichIsA("ImageButton", true)
+end
+
 local function setVisible(guiObject, visible)
-	if guiObject and guiObject:IsA("GuiObject") then
-		guiObject.Visible = visible
+	local target = resolveGuiObject(guiObject)
+	if target then
+		target.Visible = visible
 	end
 end
 
 local function setImage(imageObject, image)
-	if imageObject and (imageObject:IsA("ImageLabel") or imageObject:IsA("ImageButton")) then
-		imageObject.Image = image or ""
+	local target = resolveImageTarget(imageObject)
+	if target then
+		target.Image = image or ""
+	end
+end
+
+local function preloadImageTargets(targets)
+	if type(targets) ~= "table" then
+		return
+	end
+	local instances = {}
+	for _, target in ipairs(targets) do
+		local resolved = resolveImageTarget(target)
+		if resolved then
+			table.insert(instances, resolved)
+		end
+	end
+	if #instances > 0 then
+		pcall(function()
+			ContentProvider:PreloadAsync(instances)
+		end)
 	end
 end
 
@@ -154,6 +195,29 @@ local function setText(textObject, text)
 		textObject.Text = text or ""
 	end
 end
+
+local function resolveIconNode(frame, fallback)
+	if not frame then
+		return fallback
+	end
+	local direct = frame:FindFirstChild("Icon")
+	if direct then
+		return direct
+	end
+	local namedImage = nil
+	for _, descendant in ipairs(frame:GetDescendants()) do
+		if descendant.Name == "Icon" and (descendant:IsA("ImageLabel") or descendant:IsA("ImageButton")) then
+			return descendant
+		end
+		if not namedImage and (descendant:IsA("ImageLabel") or descendant:IsA("ImageButton")) then
+			namedImage = descendant
+		end
+	end
+	return fallback or namedImage
+end
+
+resultIcon = resolveIconNode(resultFrame, resultIcon)
+levelUpIcon = resolveIconNode(levelUpFrame, levelUpIcon)
 
 local preloadedAssets = {}
 
@@ -195,20 +259,43 @@ local function collectGuiImages(container, targets)
 	end
 end
 
+-- 同步预加载资源，确保加载完成后才返回
 local function preloadAssets(assets)
 	if #assets <= 0 then
 		return
 	end
-	local ok = pcall(function()
-		ContentProvider:PreloadAsync(assets)
-	end)
-	if not ok then
-		for _, asset in ipairs(assets) do
-			pcall(function()
-				ContentProvider:PreloadAsync({ asset })
-			end)
+	-- 分离字符串资源和实例
+	local stringAssets = {}
+	local instanceAssets = {}
+	for _, asset in ipairs(assets) do
+		if type(asset) == "string" then
+			table.insert(stringAssets, asset)
+		elseif typeof(asset) == "Instance" then
+			table.insert(instanceAssets, asset)
 		end
 	end
+	-- 预加载字符串资源
+	if #stringAssets > 0 then
+		pcall(function()
+			ContentProvider:PreloadAsync(stringAssets)
+		end)
+	end
+	-- 预加载实例
+	if #instanceAssets > 0 then
+		pcall(function()
+			ContentProvider:PreloadAsync(instanceAssets)
+		end)
+	end
+end
+
+-- 预加载单个图片并等待完成
+local function preloadImageSync(assetId)
+	if type(assetId) ~= "string" or assetId == "" then
+		return
+	end
+	pcall(function()
+		ContentProvider:PreloadAsync({ assetId })
+	end)
 end
 
 local function waitForAssetsPreloaded(timeoutSeconds)
@@ -249,37 +336,53 @@ local function preloadFigurineModel(figurineInfo)
 	if not source then
 		return
 	end
-	local ok = pcall(function()
+	pcall(function()
 		ContentProvider:PreloadAsync({ source })
 	end)
-	if not ok then
-		pcall(function()
-			ContentProvider:PreloadAsync(source:GetDescendants())
-		end)
-	end
+	pcall(function()
+		ContentProvider:PreloadAsync(source:GetDescendants())
+	end)
 end
 
 local function preloadGachaAssets(capsuleInfo, figurineInfo)
 	if not capsuleInfo or not figurineInfo then
 		return
 	end
-	preloadFigurineModel(figurineInfo)
-	local targets = {}
+
+	-- 收集所有需要预加载的图片资源ID
+	local imageAssets = {}
+
+	-- 盲盒图标和展示图
+	local capsuleIcon = capsuleInfo.Icon or ""
+	local capsuleDisplay = capsuleInfo.DisplayImage or ""
+	if capsuleIcon ~= "" then
+		table.insert(imageAssets, capsuleIcon)
+	end
+	if capsuleDisplay ~= "" and capsuleDisplay ~= capsuleIcon then
+		table.insert(imageAssets, capsuleDisplay)
+	end
+
+	-- 手办图标
 	local figurineIcon = figurineInfo.Icon or ""
-	if resultIcon and (resultIcon:IsA("ImageLabel") or resultIcon:IsA("ImageButton")) then
-		resultIcon.Image = figurineIcon
-		table.insert(targets, resultIcon)
+	if figurineIcon ~= "" then
+		table.insert(imageAssets, figurineIcon)
 	end
-	if levelUpIcon and (levelUpIcon:IsA("ImageLabel") or levelUpIcon:IsA("ImageButton")) then
-		levelUpIcon.Image = figurineIcon
-		table.insert(targets, levelUpIcon)
+
+	-- 先同步预加载所有图片资源（阻塞等待完成）
+	if #imageAssets > 0 then
+		pcall(function()
+			ContentProvider:PreloadAsync(imageAssets)
+		end)
 	end
-	addPreloadAsset(targets, capsuleInfo.Icon or capsuleInfo.DisplayImage)
-	addPreloadAsset(targets, capsuleInfo.DisplayImage)
-	addPreloadAsset(targets, figurineIcon)
-	collectGuiImages(resultFrame, targets)
-	collectGuiImages(levelUpFrame, targets)
-	preloadAssets(targets)
+
+	-- 预加载手办模型
+	preloadFigurineModel(figurineInfo)
+
+	-- 设置图片到UI（此时图片已经加载完成）
+	setImage(resultCover, capsuleInfo.Icon or capsuleInfo.DisplayImage)
+	setImage(resultIcon, figurineIcon)
+	setImage(levelUpIcon, figurineIcon)
+	preloadImageTargets({ resultCover, resultIcon, levelUpIcon })
 end
 
 local function captureLayout(frame)
@@ -408,12 +511,38 @@ local gachaTimes = {
 local coverShakeMagnitude = 6
 local coverShakeInterval = 0.05
 local LIGHT_BG_ROTATION_TIME = 2
+local ASSET_PRELOAD_TIMEOUT = 20
 
 local activeToken = { Value = 0 }
 local activeTweens = {}
+local notifyGachaFinishedEvent = nil
+local ensureLabubuEvents
 
 local function setBackpackHidden(hidden)
 	BackpackVisibility.SetHidden(playerGui, "GachaResult", hidden == true)
+end
+
+local function getNotifyGachaFinishedEvent()
+	if notifyGachaFinishedEvent and notifyGachaFinishedEvent.Parent then
+		return notifyGachaFinishedEvent
+	end
+	local labubuEvents = ensureLabubuEvents()
+	if not labubuEvents then
+		return nil
+	end
+	local event = labubuEvents:FindFirstChild("NotifyGachaFinished")
+	if event and event:IsA("RemoteEvent") then
+		notifyGachaFinishedEvent = event
+		return event
+	end
+	return nil
+end
+
+local function notifyGachaFinished(figurineId)
+	local event = getNotifyGachaFinishedEvent()
+	if event then
+		event:FireServer(figurineId)
+	end
 end
 
 local function setGachaBgVisible(visible)
@@ -519,11 +648,12 @@ local function playSequence(payload)
 
 	setBackpackHidden(true)
 
-	waitForAssetsPreloaded()
+	waitForAssetsPreloaded(ASSET_PRELOAD_TIMEOUT)
 	if token ~= activeToken.Value then
 		return
 	end
 
+	-- 先预加载本次需要的所有图片（阻塞等待完成）
 	preloadGachaAssets(capsuleInfo, figurineInfo)
 	if token ~= activeToken.Value then
 		return
@@ -647,6 +777,8 @@ local function playSequence(payload)
 		return
 	end
 
+	notifyGachaFinished(payload.FigurineId)
+
 	setGachaBgVisible(false)
 	resultFrame.Visible = false
 	if levelUpFrame then
@@ -667,7 +799,7 @@ local function playSequence(payload)
 	finalize()
 end
 
-local function ensureLabubuEvents()
+ensureLabubuEvents = function()
 	local eventsFolder = ReplicatedStorage:WaitForChild("Events", 10)
 	if not eventsFolder then
 		return nil
@@ -680,6 +812,10 @@ local function bindOpenEggResult()
 	if not labubuEvents then
 		warn("[GachaResult] LabubuEvents not found")
 		return
+	end
+	notifyGachaFinishedEvent = labubuEvents:WaitForChild("NotifyGachaFinished", 10)
+	if not notifyGachaFinishedEvent then
+		warn("[GachaResult] NotifyGachaFinished event not found")
 	end
 	local event = labubuEvents:WaitForChild("OpenEggResult", 10)
 	if not event or not event:IsA("RemoteEvent") then

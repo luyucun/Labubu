@@ -18,6 +18,7 @@ local GameConfig = {
 	ConveyorMoveTime = 9,
 	CapsuleSpawnPoolId = 1,
 	FigurineCoinCapSeconds = 10800,
+	OfflineCapSeconds = 7200,
 	MaxPlacedCapsules = 12,
 	ClaimAllProductId = 3514031081,
 	ClaimAllTenProductId = 3514031237,

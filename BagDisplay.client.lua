@@ -2,10 +2,11 @@
 脚本名称: BagDisplay
 脚本类型: LocalScript
 脚本位置: StarterPlayer/StarterPlayerScripts/UI/BagDisplay
-版本: V2.6
+版本: V2.7
 职责: 盲盒背包总览UI显示与筛选
 ]]
 
+local ContentProvider = game:GetService("ContentProvider")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -322,6 +323,22 @@ end
 refresh = function()
 	local entries = buildInventory()
 	clearEntries()
+
+	-- 预加载所有盲盒图标
+	local iconsToPreload = {}
+	local seenIcons = {}
+	for _, entry in ipairs(entries) do
+		local info = getCapsuleInfo(entry.Id)
+		if info and info.Icon and info.Icon ~= "" and not seenIcons[info.Icon] then
+			seenIcons[info.Icon] = true
+			table.insert(iconsToPreload, info.Icon)
+		end
+	end
+	if #iconsToPreload > 0 then
+		pcall(function()
+			ContentProvider:PreloadAsync(iconsToPreload)
+		end)
+	end
 
 	for _, entry in ipairs(entries) do
 		local info = getCapsuleInfo(entry.Id)

@@ -20,6 +20,7 @@ local UpgradeConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForCh
 
 local DataService = require(script.Parent:WaitForChild("DataService"))
 local FriendBonusService = require(script.Parent:WaitForChild("FriendBonusService"))
+local ProgressionService = require(script.Parent:WaitForChild("ProgressionService"))
 
 local Modules = ReplicatedStorage:WaitForChild("Modules")
 local FormatHelper = require(Modules:WaitForChild("FormatHelper"))
@@ -47,6 +48,9 @@ local PLATFORM_EFFECT_TEMPLATE_NAME = "EffectPlatformUp"
 local PLATFORM_MIN_Y = 1
 local PLATFORM_MAX_Y = 5
 local UI_UPDATE_INTERVAL = 1
+local PRESENT_FALLBACK_BUFFER = 0.5
+
+local pendingPresents = {} -- [userId] = { [figurineId] = {Token, MinTime, Present} }
 
 local function ensureLabubuEvents()
 	local eventsFolder = ReplicatedStorage:FindFirstChild("Events")
@@ -77,6 +81,71 @@ local function ensurePlaySfxEvent()
 		event.Parent = labubuEvents
 	end
 	return event
+end
+
+local function ensureGachaFinishedEvent()
+	local labubuEvents = ensureLabubuEvents()
+	local event = labubuEvents:FindFirstChild("NotifyGachaFinished")
+	if event and not event:IsA("RemoteEvent") then
+		event:Destroy()
+		event = nil
+	end
+	if not event then
+		event = Instance.new("RemoteEvent")
+		event.Name = "NotifyGachaFinished"
+		event.Parent = labubuEvents
+	end
+	return event
+end
+
+local function clearPendingPresent(userId, figurineId)
+	local bucket = pendingPresents[userId]
+	if not bucket then
+		return
+	end
+	bucket[figurineId] = nil
+	if not next(bucket) then
+		pendingPresents[userId] = nil
+	end
+end
+
+local function triggerPendingPresent(player, figurineId, token)
+	if not player or not player.Parent then
+		return
+	end
+	local bucket = pendingPresents[player.UserId]
+	local entry = bucket and bucket[figurineId]
+	if not entry or entry.Token ~= token then
+		return
+	end
+	local now = os.clock()
+	if now < entry.MinTime then
+		task.delay(entry.MinTime - now, function()
+			triggerPendingPresent(player, figurineId, token)
+		end)
+		return
+	end
+	clearPendingPresent(player.UserId, figurineId)
+	entry.Present()
+end
+
+local function registerPendingPresent(player, figurineId, presentFn, delaySeconds)
+	if not player or not player.Parent then
+		return
+	end
+	local userId = player.UserId
+	if not pendingPresents[userId] then
+		pendingPresents[userId] = {}
+	end
+	local token = tostring(os.clock()) .. "_" .. tostring(math.random(1000, 9999))
+	pendingPresents[userId][figurineId] = {
+		Token = token,
+		MinTime = os.clock(),
+		Present = presentFn,
+	}
+	task.delay((tonumber(delaySeconds) or 0) + PRESENT_FALLBACK_BUFFER, function()
+		triggerPendingPresent(player, figurineId, token)
+	end)
 end
 
 local playSfxEvent = ensurePlaySfxEvent()
@@ -634,7 +703,11 @@ local function getFigurineRate(player, figurineInfo)
 		return 0
 	end
 	local multiplier = DataService:GetOutputMultiplier(player)
-	local rate = baseRate * multiplier
+	local outputBonus = DataService:GetProgressionOutputBonus(player)
+	if outputBonus < 0 then
+		outputBonus = 0
+	end
+	local rate = baseRate * (1 + outputBonus) * multiplier
 	local bonusFactor = FriendBonusService:GetBonusFactor(player)
 	if bonusFactor <= 1 then
 		return rate
@@ -1186,6 +1259,7 @@ function FigurineService:UnbindPlayer(player)
 		end
 		playerStates[player.UserId] = nil
 	end
+	pendingPresents[player.UserId] = nil
 
 	local homeFolder = getHomeFolder(player)
 	if not homeFolder then
@@ -1199,6 +1273,19 @@ function FigurineService:UnbindPlayer(player)
 			end
 		end
 	end
+end
+
+function FigurineService:HandleGachaFinished(player, figurineId)
+	if not player or not player.Parent then
+		return
+	end
+	local id = tonumber(figurineId) or figurineId
+	local bucket = pendingPresents[player.UserId]
+	local entry = bucket and bucket[id]
+	if not entry then
+		return
+	end
+	triggerPendingPresent(player, id, entry.Token)
 end
 
 function FigurineService:GrantFromCapsule(player, capsuleInfo, presentDelaySeconds)
@@ -1219,8 +1306,22 @@ function FigurineService:GrantFromCapsule(player, capsuleInfo, presentDelaySecon
 		return nil, false
 	end
 
+	if ProgressionService then
+		local upgradedId = ProgressionService:ApplyExtraLuck(player, figurineId)
+		if upgradedId and upgradedId ~= figurineId then
+			local upgradedInfo = FigurineConfig.GetById(upgradedId)
+			if upgradedInfo then
+				figurineId = upgradedId
+				figurineInfo = upgradedInfo
+			end
+		end
+	end
+
 	local result = DataService:AddFigurine(player, figurineId, capsuleInfo.Rarity)
 	local added = result and result.IsNew
+	if added and ProgressionService then
+		ProgressionService:HandleFigurineUnlocked(player, figurineInfo)
+	end
 	if added then
 		local function present()
 			if not player or not player.Parent then
@@ -1234,7 +1335,7 @@ function FigurineService:GrantFromCapsule(player, capsuleInfo, presentDelaySecon
 		end
 		local delaySeconds = tonumber(presentDelaySeconds) or 0
 		if delaySeconds > 0 then
-			task.delay(delaySeconds, present)
+			registerPendingPresent(player, figurineInfo.Id, present, delaySeconds)
 		else
 			present()
 		end
@@ -1254,6 +1355,13 @@ function FigurineService:GrantFromCapsule(player, capsuleInfo, presentDelaySecon
 	end
 
 	return figurineInfo, result
+end
+
+local gachaFinishedEvent = ensureGachaFinishedEvent()
+if gachaFinishedEvent then
+	gachaFinishedEvent.OnServerEvent:Connect(function(player, figurineId)
+		FigurineService:HandleGachaFinished(player, figurineId)
+	end)
 end
 
 return FigurineService

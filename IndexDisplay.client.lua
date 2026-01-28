@@ -2,9 +2,10 @@
 脚本名称: IndexDisplay
 脚本类型: LocalScript
 脚本位置: StarterPlayer/StarterPlayerScripts/UI/IndexDisplay
-版本: V2.7
+版本: V2.8
 职责: 手办索引界面显示与筛选]]
 
+local ContentProvider = game:GetService("ContentProvider")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
@@ -555,6 +556,20 @@ local function buildEntries()
 	if type(list) ~= "table" then
 		return
 	end
+
+	-- 预加载所有手办图标
+	local iconsToPreload = {}
+	for _, info in ipairs(list) do
+		if info.Icon and info.Icon ~= "" then
+			table.insert(iconsToPreload, info.Icon)
+		end
+	end
+	if #iconsToPreload > 0 then
+		pcall(function()
+			ContentProvider:PreloadAsync(iconsToPreload)
+		end)
+	end
+
 	for index, info in ipairs(list) do
 		local clone = template:Clone()
 		clone.Name = string.format("Figurine_%s", tostring(info.Id))

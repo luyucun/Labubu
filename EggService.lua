@@ -19,6 +19,7 @@ local FormatHelper = require(ReplicatedStorage:WaitForChild("Modules"):WaitForCh
 
 local DataService = require(script.Parent:WaitForChild("DataService"))
 local FigurineService = require(script.Parent:WaitForChild("FigurineService"))
+local ProgressionService = require(script.Parent:WaitForChild("ProgressionService"))
 
 local EggService = {}
 EggService.__index = EggService
@@ -702,6 +703,28 @@ local function formatCountdownText(seconds)
 	return string.format("%d:%02d", minutes, secs)
 end
 
+local function getAdjustedOpenSeconds(player, baseSeconds)
+	local seconds = tonumber(baseSeconds) or 0
+	if seconds <= 0 then
+		return 0
+	end
+	local reduction = 0
+	if ProgressionService and player then
+		reduction = ProgressionService:GetHatchTimeReduction(player)
+	end
+	if reduction < 0 then
+		reduction = 0
+	end
+	if reduction > 1 then
+		reduction = 1
+	end
+	local adjusted = seconds * (1 - reduction)
+	if adjusted < 0 then
+		adjusted = 0
+	end
+	return adjusted
+end
+
 local function applyProgressBar(progressBar, progress)
 	if not progressBar or not progressBar:IsA("GuiObject") then
 		return
@@ -901,6 +924,9 @@ function EggService:HandleOpen(player, model, ignoreReady)
 	clearPaidOpenRequest(player, eggUid)
 	model:SetAttribute("IsOpened", true)
 	DataService:AddCapsuleOpen(player, capsuleId)
+	if ProgressionService and capsuleInfo then
+		ProgressionService:HandleCapsuleOpened(player, capsuleInfo)
+	end
 	if eggUid then
 		DataService:RemovePlacedEgg(player, eggUid)
 	end
@@ -1119,6 +1145,9 @@ function EggService:PlaceFromTool(player, tool, targetWorldPosition)
 	end
 
 	local maxPlaced = tonumber(GameConfig.MaxPlacedCapsules) or 12
+	if ProgressionService then
+		maxPlaced = ProgressionService:GetMaxPlacedCapsules(player)
+	end
 	if maxPlaced > 0 and getPlacedEggCount(placedFolder, player) >= maxPlaced then
 		sendErrorHint(player, "PlacementLimit", "Placement limit reached")
 		return
@@ -1149,7 +1178,8 @@ function EggService:PlaceFromTool(player, tool, targetWorldPosition)
 	model:SetAttribute("CapsuleName", capsuleInfo.Name)
 	model:SetAttribute("Quality", capsuleInfo.Quality)
 	model:SetAttribute("Rarity", capsuleInfo.Rarity)
-	model:SetAttribute("OpenSeconds", capsuleInfo.OpenSeconds)
+	local openSeconds = getAdjustedOpenSeconds(player, capsuleInfo.OpenSeconds)
+	model:SetAttribute("OpenSeconds", openSeconds)
 	model:SetAttribute("DeveloperProductId", capsuleInfo.DeveloperProductId)
 	model:SetAttribute("OwnerUserId", player.UserId)
 	model:SetAttribute("Placed", true)
@@ -1204,7 +1234,7 @@ function EggService:PlaceFromTool(player, tool, targetWorldPosition)
 	setAnchored(model, true)
 	model.Parent = placedFolder
 
-	local hatchEndTime = os.time() + capsuleInfo.OpenSeconds
+	local hatchEndTime = os.time() + openSeconds
 	model:SetAttribute("HatchEndTime", hatchEndTime)
 	setupHatchTimer(model, hatchEndTime)
 
@@ -1327,7 +1357,8 @@ function EggService:CreatePlacedCapsuleFromData(player, capsuleInfo, entry, plac
 	model:SetAttribute("CapsuleName", capsuleInfo.Name)
 	model:SetAttribute("Quality", capsuleInfo.Quality)
 	model:SetAttribute("Rarity", capsuleInfo.Rarity)
-	model:SetAttribute("OpenSeconds", capsuleInfo.OpenSeconds)
+	local openSeconds = getAdjustedOpenSeconds(player, capsuleInfo.OpenSeconds)
+	model:SetAttribute("OpenSeconds", openSeconds)
 	model:SetAttribute("DeveloperProductId", capsuleInfo.DeveloperProductId)
 	model:SetAttribute("OwnerUserId", player.UserId)
 	model:SetAttribute("Placed", true)
@@ -1351,7 +1382,7 @@ function EggService:CreatePlacedCapsuleFromData(player, capsuleInfo, entry, plac
 
 	local hatchEndTime = tonumber(entry.HatchEndTime)
 	if not hatchEndTime then
-		hatchEndTime = os.time() + capsuleInfo.OpenSeconds
+		hatchEndTime = os.time() + openSeconds
 		entry.HatchEndTime = hatchEndTime
 		DataService:MarkDirty(player)
 	end
