@@ -8,11 +8,9 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 local player = Players.LocalPlayer
-local mouse = player:GetMouse()
 
 local function getPlaceEggEvent()
 	local eventsFolder = ReplicatedStorage:WaitForChild("Events", 10)
@@ -36,32 +34,16 @@ if not placeEggEvent then
 	return
 end
 
-local lastInputPosition
-
-UserInputService.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		lastInputPosition = input.Position
+local function getFootWorldPosition()
+	local character = player.Character
+	if not character then
+		return nil
 	end
-end)
-
-local function getClickWorldPosition()
-	local camera = Workspace.CurrentCamera
-	if camera and lastInputPosition then
-		local ray = camera:ViewportPointToRay(lastInputPosition.X, lastInputPosition.Y)
-		local params = RaycastParams.new()
-		params.FilterType = Enum.RaycastFilterType.Exclude
-		if player.Character then
-			params.FilterDescendantsInstances = { player.Character }
-		end
-		local result = Workspace:Raycast(ray.Origin, ray.Direction * 500, params)
-		if result then
-			return result.Position
-		end
+	local root = character:FindFirstChild("HumanoidRootPart") or character.PrimaryPart
+	if not root then
+		return nil
 	end
-	if mouse and mouse.Hit then
-		return mouse.Hit.Position
-	end
-	return nil
+	return root.Position
 end
 
 local toolConnections = {}
@@ -78,7 +60,7 @@ local function bindTool(tool)
 	end
 
 	toolConnections[tool] = tool.Activated:Connect(function()
-		local position = getClickWorldPosition()
+		local position = getFootWorldPosition()
 		if not position then
 			return
 		end

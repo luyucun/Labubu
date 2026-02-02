@@ -14,6 +14,7 @@ local GameConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild
 local FigurineConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("FigurineConfig"))
 local FigurineRateConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("FigurineRateConfig"))
 local UpgradeConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("UpgradeConfig"))
+local PotionConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("PotionConfig"))
 
 local DataService = {}
 DataService.__index = DataService
@@ -23,6 +24,26 @@ local sessionData = {} -- [userId] = {Data = table, Dirty = bool, LastSave = num
 local playtimeListeners = {}
 local autoSaveStarted = false
 local PLAYTIME_UPDATE_INTERVAL = 1
+local LOAD_RETRY_COUNT = 3
+local LOAD_RETRY_BASE_DELAY = 1.0
+
+local function fetchPlayerData(key)
+	local lastErr
+	for attempt = 1, LOAD_RETRY_COUNT do
+		local success, result = pcall(function()
+			return store:GetAsync(key)
+		end)
+		if success then
+			if result == nil or type(result) == "table" then
+				return true, result, nil, nil
+			end
+			return false, nil, "corrupt", result
+		end
+		lastErr = result
+		task.wait(LOAD_RETRY_BASE_DELAY * attempt)
+	end
+	return false, nil, "error", lastErr
+end
 
 local function defaultData()
 	return {
@@ -41,7 +62,11 @@ local function defaultData()
 		MusicEnabled = true,
 		SfxEnabled = true,
 		ProgressionClaimed = {},
+		PotionCounts = {},
+		PotionEndTimes = {},
 		LastLogoutTime = 0,
+		GuideStep = 1,
+		StarterPackPurchased = false,
 	}
 end
 
@@ -209,6 +234,25 @@ local function normalizeDiamonds(value)
 	return math.floor(num)
 end
 
+local function normalizeStarterPackPurchased(value)
+	return value == true
+end
+
+local function normalizeGuideStep(value)
+	local num = tonumber(value)
+	if not num then
+		return 1
+	end
+	num = math.floor(num)
+	if num < 0 then
+		return 0
+	end
+	if num > 5 then
+		return 5
+	end
+	return num
+end
+
 local function normalizeProgressionClaimed(value)
 	if type(value) ~= "table" then
 		return {}
@@ -221,6 +265,80 @@ local function normalizeProgressionClaimed(value)
 		end
 	end
 	return normalized
+end
+
+local function normalizePotionCounts(value)
+	local changed = false
+	local source = value
+	if type(source) ~= "table" then
+		source = {}
+		changed = true
+	end
+
+	local normalized = {}
+	for _, info in ipairs(PotionConfig.GetAll()) do
+		if info and info.Id then
+			local id = tonumber(info.Id) or info.Id
+			local raw = source[id]
+			if raw == nil then
+				raw = source[tostring(id)]
+			end
+			local count = normalizeCount(raw)
+			if raw ~= nil and count ~= raw then
+				changed = true
+			end
+			normalized[id] = count
+		end
+	end
+
+	for key, _ in pairs(source) do
+		local id = tonumber(key) or key
+		if id and not PotionConfig.GetById(id) then
+			changed = true
+			break
+		end
+	end
+
+	return normalized, changed
+end
+
+local function normalizePotionEndTimes(value)
+	local changed = false
+	local source = value
+	if type(source) ~= "table" then
+		source = {}
+		changed = true
+	end
+
+	local normalized = {}
+	for _, info in ipairs(PotionConfig.GetAll()) do
+		if info and info.Id then
+			local id = tonumber(info.Id) or info.Id
+			local raw = source[id]
+			if raw == nil then
+				raw = source[tostring(id)]
+			end
+			local timeValue = tonumber(raw) or 0
+			if timeValue < 0 then
+				timeValue = 0
+			end
+			timeValue = math.floor(timeValue)
+			if raw ~= nil and timeValue ~= raw then
+				changed = true
+			end
+			normalized[id] = timeValue
+		end
+	end
+
+	for key, _ in pairs(source) do
+		local id = tonumber(key) or key
+		if id and not PotionConfig.GetById(id) then
+			changed = true
+			break
+		end
+	end
+
+	return normalized, changed
 end
 
 local function normalizeLogoutTime(value)
@@ -309,7 +427,7 @@ local function normalizeCapsuleOpenById(stats)
 	return normalized, total, changed
 end
 
-local function calculateOutputSpeed(figurines, figurineStates, bonus)
+local function calculateOutputSpeed(figurines, figurineStates, bonusAdd)
 	if type(figurines) ~= "table" then
 		return 0
 	end
@@ -326,15 +444,62 @@ local function calculateOutputSpeed(figurines, figurineStates, bonus)
 			end
 		end
 	end
-	local bonusFactor = 1 + (tonumber(bonus) or 0)
+	local bonusFactor = 1 + (tonumber(bonusAdd) or 0)
 	if bonusFactor < 0 then
 		bonusFactor = 0
 	end
 	return total * bonusFactor
 end
 
-local function adjustCollectTimesForMultiplierChange(player, oldMultiplier, newMultiplier)
-	if not player or oldMultiplier == newMultiplier then
+local function normalizeBonusAdd(value)
+	local num = tonumber(value) or 0
+	if num < 0 then
+		return 0
+	end
+	return num
+end
+
+local function getPurchaseBonusAdd(multiplier)
+	local normalized = normalizeOutputMultiplier(multiplier)
+	local add = normalized - 1
+	if add < 0 then
+		add = 0
+	end
+	return add
+end
+
+local function getPotionBonusFromEndTimes(endTimes, now)
+	if type(endTimes) ~= "table" then
+		return 0
+	end
+	local total = 0
+	local timestamp = now or os.time()
+	for _, info in ipairs(PotionConfig.GetAll()) do
+		if info and info.Id then
+			local endTime = tonumber(endTimes[info.Id]) or tonumber(endTimes[tostring(info.Id)]) or 0
+			if endTime > timestamp then
+				local bonus = tonumber(info.Bonus) or 0
+				if bonus > 0 then
+					total += bonus
+				end
+			end
+		end
+	end
+	return normalizeBonusAdd(total)
+end
+
+local function getTotalBonusAddFromData(data, progressionBonus, now)
+	if not data then
+		return normalizeBonusAdd(progressionBonus)
+	end
+	local total = normalizeBonusAdd(progressionBonus)
+	total += getPurchaseBonusAdd(data.OutputMultiplier)
+	total += getPotionBonusFromEndTimes(data.PotionEndTimes, now)
+	return normalizeBonusAdd(total)
+end
+
+local function adjustCollectTimesForOutputBonusChange(player, oldFactor, newFactor)
+	if not player or oldFactor == newFactor then
 		return
 	end
 	local record = sessionData[player.UserId]
@@ -359,8 +524,8 @@ local function adjustCollectTimesForMultiplierChange(player, oldMultiplier, newM
 				end
 				local baseRate = calculateFigurineRate(info, state)
 				if baseRate > 0 then
-					local oldRate = baseRate * oldMultiplier
-					local newRate = baseRate * newMultiplier
+					local oldRate = baseRate * oldFactor
+					local newRate = baseRate * newFactor
 					if newRate > 0 then
 						local pending = oldRate * elapsed
 						local targetElapsed = pending / newRate
@@ -431,6 +596,8 @@ local function applyStatsAttributes(player, data)
 	player:SetAttribute("MusicEnabled", data.MusicEnabled == true)
 	player:SetAttribute("SfxEnabled", data.SfxEnabled == true)
 	player:SetAttribute("Diamonds", normalizeDiamonds(data.Diamonds))
+	player:SetAttribute("GuideStep", normalizeGuideStep(data.GuideStep))
+	player:SetAttribute("StarterPackPurchased", normalizeStarterPackPurchased(data.StarterPackPurchased))
 end
 
 local function ensureFigurineOwnedFolder(player)
@@ -526,18 +693,19 @@ function DataService:LoadPlayer(player)
 	local userId = player.UserId
 	local key = tostring(userId)
 	local data
-
-	local success, result = pcall(function()
-		return store:GetAsync(key)
-	end)
-
-	if success and type(result) == "table" then
-		data = result
-	else
-		data = defaultData()
+	local success, result, errType, errDetail = fetchPlayerData(key)
+	if not success then
+		warn(string.format("[DataService] Load failed: userId=%s type=%s err=%s", key, tostring(errType), tostring(errDetail)))
+		return nil, errType, errDetail
 	end
 
-	local needsSave = false
+	if result == nil then
+		data = defaultData()
+	else
+		data = result
+	end
+
+	local needsSave = result == nil
 
 	if data.Coins == nil then
 		data.Coins = GameConfig.StartCoins
@@ -612,6 +780,18 @@ function DataService:LoadPlayer(player)
 		data.ProgressionClaimed = normalizeProgressionClaimed(data.ProgressionClaimed)
 	end
 
+	local normalizedPotionCounts, potionCountsChanged = normalizePotionCounts(data.PotionCounts)
+	data.PotionCounts = normalizedPotionCounts
+	if potionCountsChanged then
+		needsSave = true
+	end
+
+	local normalizedPotionEndTimes, potionEndTimesChanged = normalizePotionEndTimes(data.PotionEndTimes)
+	data.PotionEndTimes = normalizedPotionEndTimes
+	if potionEndTimesChanged then
+		needsSave = true
+	end
+
 	if data.LastLogoutTime == nil then
 		data.LastLogoutTime = 0
 		needsSave = true
@@ -619,6 +799,28 @@ function DataService:LoadPlayer(player)
 		local normalizedLogout = normalizeLogoutTime(data.LastLogoutTime)
 		if data.LastLogoutTime ~= normalizedLogout then
 			data.LastLogoutTime = normalizedLogout
+			needsSave = true
+		end
+	end
+
+	if data.GuideStep == nil then
+		data.GuideStep = 1
+		needsSave = true
+	else
+		local normalizedGuideStep = normalizeGuideStep(data.GuideStep)
+		if data.GuideStep ~= normalizedGuideStep then
+			data.GuideStep = normalizedGuideStep
+			needsSave = true
+		end
+	end
+
+	if data.StarterPackPurchased == nil then
+		data.StarterPackPurchased = false
+		needsSave = true
+	else
+		local normalizedStarterPack = normalizeStarterPackPurchased(data.StarterPackPurchased)
+		if data.StarterPackPurchased ~= normalizedStarterPack then
+			data.StarterPackPurchased = normalizedStarterPack
 			needsSave = true
 		end
 	end
@@ -646,8 +848,8 @@ function DataService:LoadPlayer(player)
 		needsSave = true
 	end
 
-	local recalculatedSpeed = calculateOutputSpeed(data.Figurines, data.FigurineStates, 0)
-		* normalizeOutputMultiplier(data.OutputMultiplier)
+	local totalBonusAdd = getTotalBonusAddFromData(data, 0, os.time())
+	local recalculatedSpeed = calculateOutputSpeed(data.Figurines, data.FigurineStates, totalBonusAdd)
 	local normalizedSpeed = normalizeOutputSpeed(data.OutputSpeed)
 	if normalizedSpeed ~= recalculatedSpeed then
 		data.OutputSpeed = recalculatedSpeed
@@ -664,6 +866,7 @@ function DataService:LoadPlayer(player)
 		PlaytimeActive = true,
 		LastPlaytimeUpdate = os.time(),
 		PlaytimeLoop = false,
+		DataVersion = 1,
 	}
 
 	applyCoinsAttribute(player, data.Coins)
@@ -687,6 +890,48 @@ end
 function DataService:GetDiamonds(player)
 	local record = sessionData[player.UserId]
 	return record and record.Data.Diamonds or 0
+end
+
+function DataService:GetGuideStep(player)
+	local record = sessionData[player.UserId]
+	return record and normalizeGuideStep(record.Data.GuideStep) or 0
+end
+
+function DataService:SetGuideStep(player, step)
+	local record = sessionData[player.UserId]
+	if not record then
+		return
+	end
+	local normalized = normalizeGuideStep(step)
+	if record.Data.GuideStep == normalized then
+		return
+	end
+	record.Data.GuideStep = normalized
+	record.Dirty = true
+	if player and player.Parent then
+		player:SetAttribute("GuideStep", normalized)
+	end
+end
+
+function DataService:HasStarterPackPurchased(player)
+	local record = sessionData[player.UserId]
+	return record and record.Data.StarterPackPurchased == true
+end
+
+function DataService:SetStarterPackPurchased(player, purchased)
+	local record = sessionData[player.UserId]
+	if not record then
+		return
+	end
+	local normalized = normalizeStarterPackPurchased(purchased)
+	if record.Data.StarterPackPurchased == normalized then
+		return
+	end
+	record.Data.StarterPackPurchased = normalized
+	record.Dirty = true
+	if player and player.Parent then
+		player:SetAttribute("StarterPackPurchased", normalized)
+	end
 end
 
 function DataService:GetProgressionClaimed(player)
@@ -842,8 +1087,10 @@ function DataService:SetOutputMultiplier(player, multiplier)
 		end
 		return current
 	end
-	adjustCollectTimesForMultiplierChange(player, current, normalized)
+	local oldFactor = self:GetOutputBonusFactor(player)
 	record.Data.OutputMultiplier = normalized
+	local newFactor = self:GetOutputBonusFactor(player)
+	adjustCollectTimesForOutputBonusChange(player, oldFactor, newFactor)
 	record.Dirty = true
 	if player and player.Parent then
 		player:SetAttribute("OutputMultiplier", normalized)
@@ -872,9 +1119,200 @@ function DataService:SetProgressionOutputBonus(player, bonus)
 	if record.ProgressionOutputBonus == normalized then
 		return normalized
 	end
+	local oldFactor = self:GetOutputBonusFactor(player)
 	record.ProgressionOutputBonus = normalized
+	local newFactor = self:GetOutputBonusFactor(player)
+	adjustCollectTimesForOutputBonusChange(player, oldFactor, newFactor)
 	self:RecalculateOutputSpeed(player)
 	return normalized
+end
+
+function DataService:GetPotionCounts(player)
+	local record = sessionData[player.UserId]
+	return record and record.Data.PotionCounts or nil
+end
+
+function DataService:GetPotionEndTimes(player)
+	local record = sessionData[player.UserId]
+	return record and record.Data.PotionEndTimes or nil
+end
+
+function DataService:GetPotionCount(player, potionId)
+	local record = sessionData[player.UserId]
+	if not record then
+		return 0
+	end
+	if type(record.Data.PotionCounts) ~= "table" then
+		record.Data.PotionCounts = {}
+	end
+	local id = tonumber(potionId) or potionId
+	local value = record.Data.PotionCounts[id] or record.Data.PotionCounts[tostring(id)] or 0
+	return normalizeCount(value)
+end
+
+function DataService:GetPotionEndTime(player, potionId)
+	local record = sessionData[player.UserId]
+	if not record then
+		return 0
+	end
+	if type(record.Data.PotionEndTimes) ~= "table" then
+		record.Data.PotionEndTimes = {}
+	end
+	local id = tonumber(potionId) or potionId
+	local value = record.Data.PotionEndTimes[id] or record.Data.PotionEndTimes[tostring(id)] or 0
+	local timeValue = tonumber(value) or 0
+	if timeValue < 0 then
+		timeValue = 0
+	end
+	return math.floor(timeValue)
+end
+
+function DataService:GetPotionRemainingSeconds(player, potionId, now)
+	local endTime = self:GetPotionEndTime(player, potionId)
+	local timestamp = now or os.time()
+	local remaining = endTime - timestamp
+	if remaining < 0 then
+		return 0
+	end
+	return math.floor(remaining)
+end
+
+function DataService:SetPotionCount(player, potionId, count)
+	local record = sessionData[player.UserId]
+	if not record then
+		return 0
+	end
+	if type(record.Data.PotionCounts) ~= "table" then
+		record.Data.PotionCounts = {}
+	end
+	local id = tonumber(potionId) or potionId
+	local value = normalizeCount(count)
+	record.Data.PotionCounts[id] = value
+	record.Dirty = true
+	return value
+end
+
+function DataService:AddPotionCount(player, potionId, delta)
+	local record = sessionData[player.UserId]
+	if not record then
+		return 0
+	end
+	if type(record.Data.PotionCounts) ~= "table" then
+		record.Data.PotionCounts = {}
+	end
+	local id = tonumber(potionId) or potionId
+	local current = normalizeCount(record.Data.PotionCounts[id])
+	local nextValue = normalizeCount(current + (tonumber(delta) or 0))
+	record.Data.PotionCounts[id] = nextValue
+	record.Dirty = true
+	return nextValue
+end
+
+function DataService:SetPotionEndTime(player, potionId, endTime)
+	local record = sessionData[player.UserId]
+	if not record then
+		return 0
+	end
+	if type(record.Data.PotionEndTimes) ~= "table" then
+		record.Data.PotionEndTimes = {}
+	end
+	local id = tonumber(potionId) or potionId
+	local timeValue = tonumber(endTime) or 0
+	if timeValue < 0 then
+		timeValue = 0
+	end
+	timeValue = math.floor(timeValue)
+	record.Data.PotionEndTimes[id] = timeValue
+	record.Dirty = true
+	return timeValue
+end
+
+function DataService:GetPotionBonus(player, now)
+	local record = sessionData[player.UserId]
+	if not record then
+		return 0
+	end
+	return getPotionBonusFromEndTimes(record.Data.PotionEndTimes, now)
+end
+
+function DataService:GetPurchaseBonusAdd(player)
+	local record = sessionData[player.UserId]
+	if not record then
+		return 0
+	end
+	return getPurchaseBonusAdd(record.Data.OutputMultiplier)
+end
+
+function DataService:GetTotalOutputBonusAdd(player, now)
+	local record = sessionData[player.UserId]
+	if not record then
+		return 0
+	end
+	local progressionBonus = normalizeBonusAdd(record.ProgressionOutputBonus)
+	return getTotalBonusAddFromData(record.Data, progressionBonus, now)
+end
+
+function DataService:GetOutputBonusFactor(player, now)
+	local totalAdd = self:GetTotalOutputBonusAdd(player, now)
+	local factor = 1 + totalAdd
+	if factor < 0 then
+		factor = 0
+	end
+	return factor
+end
+
+function DataService:ApplyPotionDuration(player, potionId, addSeconds)
+	local record = sessionData[player.UserId]
+	if not record then
+		return 0
+	end
+	local added = tonumber(addSeconds) or 0
+	if added <= 0 then
+		return self:GetPotionEndTime(player, potionId)
+	end
+	local oldFactor = self:GetOutputBonusFactor(player)
+	local now = os.time()
+	local currentEnd = self:GetPotionEndTime(player, potionId)
+	local baseTime = currentEnd > now and currentEnd or now
+	local newEnd = baseTime + math.floor(added)
+	self:SetPotionEndTime(player, potionId, newEnd)
+	local newFactor = self:GetOutputBonusFactor(player)
+	adjustCollectTimesForOutputBonusChange(player, oldFactor, newFactor)
+	self:RecalculateOutputSpeed(player)
+	return newEnd
+end
+
+function DataService:ClearExpiredPotions(player, now)
+	local record = sessionData[player.UserId]
+	if not record then
+		return false
+	end
+	if type(record.Data.PotionEndTimes) ~= "table" then
+		record.Data.PotionEndTimes = {}
+	end
+	local timestamp = now or os.time()
+	local changed = false
+	local expiredBonusAdd = 0
+	for _, info in ipairs(PotionConfig.GetAll()) do
+		if info and info.Id then
+			local endTime = tonumber(record.Data.PotionEndTimes[info.Id]) or 0
+			if endTime > 0 and endTime <= timestamp then
+				expiredBonusAdd += tonumber(info.Bonus) or 0
+				record.Data.PotionEndTimes[info.Id] = 0
+				changed = true
+			end
+		end
+	end
+	if not changed then
+		return false
+	end
+	record.Dirty = true
+	local currentFactor = self:GetOutputBonusFactor(player, timestamp)
+	local oldFactor = currentFactor + normalizeBonusAdd(expiredBonusAdd)
+	local newFactor = currentFactor
+	adjustCollectTimesForOutputBonusChange(player, oldFactor, newFactor)
+	self:RecalculateOutputSpeed(player)
+	return true
 end
 
 
@@ -1213,8 +1651,8 @@ function DataService:RecalculateOutputSpeed(player)
 	if not record then
 		return 0
 	end
-	local total = calculateOutputSpeed(record.Data.Figurines, record.Data.FigurineStates, record.ProgressionOutputBonus)
-		* normalizeOutputMultiplier(record.Data.OutputMultiplier)
+	local totalBonusAdd = self:GetTotalOutputBonusAdd(player, os.time())
+	local total = calculateOutputSpeed(record.Data.Figurines, record.Data.FigurineStates, totalBonusAdd)
 	if record.Data.OutputSpeed ~= total then
 		record.Data.OutputSpeed = total
 		record.Dirty = true
@@ -1331,6 +1769,7 @@ function DataService:ResetPlayerData(player)
 			PlaytimeActive = true,
 			LastPlaytimeUpdate = os.time(),
 			PlaytimeLoop = false,
+			DataVersion = 1,
 		}
 	end
 
@@ -1385,6 +1824,27 @@ function DataService:SaveAll(force)
 	for userId, record in pairs(sessionData) do
 		saveByUserId(userId, record, force)
 	end
+end
+
+function DataService:GetSnapshot(player)
+	local record = sessionData[player.UserId]
+	if not record then
+		return nil
+	end
+	-- 返回玩家数据的浅拷贝用于客户端同步
+	local snapshot = {}
+	for key, value in pairs(record.Data) do
+		snapshot[key] = value
+	end
+	return snapshot
+end
+
+function DataService:GetVersion(player)
+	local record = sessionData[player.UserId]
+	if not record then
+		return 0
+	end
+	return record.DataVersion or 1
 end
 
 function DataService:StartAutoSave()

@@ -19,6 +19,7 @@ local FigurinePoolConfig = require(ReplicatedStorage:WaitForChild("Config"):Wait
 local UpgradeConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("UpgradeConfig"))
 
 local DataService = require(script.Parent:WaitForChild("DataService"))
+local GuideService = require(script.Parent:WaitForChild("GuideService"))
 local FriendBonusService = require(script.Parent:WaitForChild("FriendBonusService"))
 local ProgressionService = require(script.Parent:WaitForChild("ProgressionService"))
 
@@ -46,9 +47,23 @@ local CLAIM_EFFECT_TEMPLATE_NAME = "EffectTouchMoney"
 local CLAIM_EFFECT_DEBUG = false
 local PLATFORM_EFFECT_TEMPLATE_NAME = "EffectPlatformUp"
 local PLATFORM_MIN_Y = 1
-local PLATFORM_MAX_Y = 5
+local PLATFORM_MAX_Y = 7
 local UI_UPDATE_INTERVAL = 1
 local PRESENT_FALLBACK_BUFFER = 0.5
+local RARITY_NAMES = {
+	[1] = "Common",
+	[2] = "Light",
+	[3] = "Gold",
+	[4] = "Diamond",
+	[5] = "Rainbow",
+}
+local RARITY_TEXT_COLORS = {
+	[1] = Color3.fromRGB(160, 160, 160),
+	[2] = Color3.fromRGB(255, 255, 255),
+	[3] = Color3.fromRGB(255, 255, 0),
+	[4] = Color3.fromRGB(255, 85, 255),
+}
+local rainbowGradientTemplate
 
 local pendingPresents = {} -- [userId] = { [figurineId] = {Token, MinTime, Present} }
 
@@ -702,12 +717,11 @@ local function getFigurineRate(player, figurineInfo)
 	if baseRate <= 0 then
 		return 0
 	end
-	local multiplier = DataService:GetOutputMultiplier(player)
-	local outputBonus = DataService:GetProgressionOutputBonus(player)
-	if outputBonus < 0 then
-		outputBonus = 0
+	local outputFactor = DataService:GetOutputBonusFactor(player)
+	if outputFactor < 0 then
+		outputFactor = 0
 	end
-	local rate = baseRate * (1 + outputBonus) * multiplier
+	local rate = baseRate * outputFactor
 	local bonusFactor = FriendBonusService:GetBonusFactor(player)
 	if bonusFactor <= 1 then
 		return rate
@@ -731,6 +745,113 @@ local function getPendingCoins(player, figurineId, rate)
 		pending = 0
 	end
 	return math.ceil(pending - 1e-9)
+end
+
+local function resolveTextObject(target)
+	if not target then
+		return nil
+	end
+	if target:IsA("TextLabel") or target:IsA("TextButton") or target:IsA("TextBox") then
+		return target
+	end
+	local label = target:FindFirstChildWhichIsA("TextLabel", true)
+	if label then
+		return label
+	end
+	local button = target:FindFirstChildWhichIsA("TextButton", true)
+	if button then
+		return button
+	end
+	return target:FindFirstChildWhichIsA("TextBox", true)
+end
+
+local function getRainbowGradientTemplate()
+	if rainbowGradientTemplate and rainbowGradientTemplate.Parent then
+		return rainbowGradientTemplate
+	end
+	local capsuleInfo = ReplicatedStorage:FindFirstChild("CapsuleInfo")
+	if not capsuleInfo then
+		capsuleInfo = ReplicatedStorage:WaitForChild("CapsuleInfo", 2)
+	end
+	if not capsuleInfo then
+		return nil
+	end
+	local rainbowNode = capsuleInfo:FindFirstChild("Rainbow", true)
+	if not rainbowNode then
+		return nil
+	end
+	local gradient = rainbowNode:FindFirstChildWhichIsA("UIGradient", true)
+	if gradient then
+		rainbowGradientTemplate = gradient
+		return gradient
+	end
+	return nil
+end
+
+local function clearTextGradients(textObject)
+	if not textObject then
+		return
+	end
+	for _, child in ipairs(textObject:GetChildren()) do
+		if child:IsA("UIGradient") then
+			child:Destroy()
+		end
+	end
+end
+
+local function applyRareStyle(textObject, rarity)
+	local target = resolveTextObject(textObject)
+	if not target then
+		return
+	end
+	clearTextGradients(target)
+	local rarityValue = tonumber(rarity) or 0
+	if rarityValue == 5 then
+		local template = getRainbowGradientTemplate()
+		if template then
+			local gradient = template:Clone()
+			gradient.Parent = target
+		end
+		target.TextColor3 = Color3.fromRGB(255, 255, 255)
+		return
+	end
+	local color = RARITY_TEXT_COLORS[rarityValue]
+	if color then
+		target.TextColor3 = color
+	end
+end
+
+local function shouldShowRare(rarity)
+	local value = tonumber(rarity) or 0
+	return value > 1
+end
+
+local function getFigurineRarity(player, figurineInfo, figurineId)
+	local state = DataService:EnsureFigurineState(player, figurineId)
+	local rarity = tonumber(state and state.Rarity)
+	if rarity then
+		return rarity
+	end
+	return tonumber(figurineInfo and figurineInfo.Rarity) or 1
+end
+
+local function updateRareLabel(player, figurineId, entry)
+	if not entry or not entry.RareLabel then
+		return
+	end
+	local target = resolveTextObject(entry.RareLabel)
+	if not target then
+		return
+	end
+	local figurineInfo = entry.FigurineInfo or FigurineConfig.GetById(figurineId)
+	local rarity = getFigurineRarity(player, figurineInfo, figurineId)
+	if not shouldShowRare(rarity) then
+		target.Visible = false
+		return
+	end
+	target.Visible = true
+	target.Text = RARITY_NAMES[rarity] or tostring(rarity)
+	applyRareStyle(target, rarity)
 end
 
 local function updateMoneyLabel(player, figurineId, entry)
@@ -823,6 +944,7 @@ local function registerUiEntry(player, figurineInfo, platform, infoGui)
 		InfoGui = infoGui,
 		NameLabel = nameLabel,
 		MoneyLabel = moneyLabel,
+		RareLabel = infoGui and infoGui:FindFirstChild("Rare", true) or nil,
 		LevelLabel = levelLabel,
 		ProgressBar = progressBar,
 		Rate = getFigurineRate(player, figurineInfo),
@@ -831,6 +953,7 @@ local function registerUiEntry(player, figurineInfo, platform, infoGui)
 	local state = getPlayerState(player)
 	state.UiEntries[figurineInfo.Id] = entry
 	updateMoneyLabel(player, figurineInfo.Id, entry)
+	updateRareLabel(player, figurineInfo.Id, entry)
 	updateLevelLabel(player, figurineInfo.Id, entry)
 end
 
@@ -977,6 +1100,9 @@ local function bindClaimButton(player, figurineInfo)
 		end
 		if hit and not touchState.TouchingParts[hit] then
 			touchState.TouchingParts[hit] = true
+		end
+		if GuideService then
+			GuideService:HandleCoinsCollected(player, figurineInfo.Id)
 		end
 		if touchState.IsTouching then
 			return
@@ -1155,6 +1281,9 @@ function FigurineService:CollectCoins(player, figurineId)
 	DataService:AddCoins(player, pending)
 	DataService:SetFigurineLastCollectTime(player, figurineId, os.time())
 	fireSfx(player, "Collect")
+	if GuideService then
+		GuideService:HandleCoinsCollected(player, figurineId)
+	end
 	return pending
 end
 
@@ -1344,6 +1473,7 @@ function FigurineService:GrantFromCapsule(player, capsuleInfo, presentDelaySecon
 		local entry = state.UiEntries[figurineId]
 		updateLevelLabel(player, figurineId, entry)
 		updateMoneyLabel(player, figurineId, entry)
+		updateRareLabel(player, figurineId, entry)
 		local homeFolder = getHomeFolder(player)
 		local figurineFolder = getFigurineFolder(homeFolder)
 		local model = findFigurineModel(figurineFolder, figurineId, player.UserId)

@@ -9,6 +9,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
+local HttpService = game:GetService("HttpService")
 
 local GameConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("GameConfig"))
 local CapsuleConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("CapsuleConfig"))
@@ -16,6 +17,16 @@ local CapsuleSpawnPoolConfig = require(ReplicatedStorage:WaitForChild("Config"):
 
 local EggService = require(script.Parent:WaitForChild("EggService"))
 local ProgressionService = require(script.Parent:WaitForChild("ProgressionService"))
+
+local function getServerTimeNow()
+	local ok, value = pcall(function()
+		return Workspace:GetServerTimeNow()
+	end)
+	if ok and type(value) == "number" then
+		return value
+	end
+	return os.time()
+end
 
 local capsuleByQualityRarity = {}
 do
@@ -36,7 +47,44 @@ local ConveyorService = {}
 ConveyorService.__index = ConveyorService
 
 local rng = Random.new()
-local running = {} -- [userId] = {Active = bool}
+local running = {} -- [userId] = {Active = bool, Capsules = { [uid] = record }}
+local purchaseCooldowns = {}
+local PURCHASE_COOLDOWN = 0.4
+
+local function ensureLabubuEvents()
+	local eventsFolder = ReplicatedStorage:FindFirstChild("Events")
+	if not eventsFolder then
+		eventsFolder = Instance.new("Folder")
+		eventsFolder.Name = "Events"
+		eventsFolder.Parent = ReplicatedStorage
+	end
+	local labubuEvents = eventsFolder:FindFirstChild("LabubuEvents")
+	if not labubuEvents then
+		labubuEvents = Instance.new("Folder")
+		labubuEvents.Name = "LabubuEvents"
+		labubuEvents.Parent = eventsFolder
+	end
+	return labubuEvents
+end
+
+local function ensureRemoteEvent(name)
+	local labubuEvents = ensureLabubuEvents()
+	local event = labubuEvents:FindFirstChild(name)
+	if event and not event:IsA("RemoteEvent") then
+		event:Destroy()
+		event = nil
+	end
+	if not event then
+		event = Instance.new("RemoteEvent")
+		event.Name = name
+		event.Parent = labubuEvents
+	end
+	return event
+end
+
+local pushConveyorSpawnEvent = ensureRemoteEvent("PushConveyorEggSpawn")
+local pushConveyorRemoveEvent = ensureRemoteEvent("PushConveyorEggRemove")
+local buyConveyorEggEvent = ensureRemoteEvent("BuyConveyorEgg")
 
 local function getCapsuleFolder(conveyorFolder)
 	local folder = conveyorFolder:FindFirstChild("Capsules")
@@ -81,6 +129,33 @@ local function getCapsuleInfo(capsuleId)
 		end
 	end
 	return nil
+end
+
+local function buildSpawnPayload(record, capsuleInfo, moveTime)
+	return {
+		Uid = record.Uid,
+		CapsuleId = capsuleInfo.Id,
+		Rarity = capsuleInfo.Rarity,
+		Quality = capsuleInfo.Quality,
+		Price = capsuleInfo.Price,
+		OpenSeconds = capsuleInfo.OpenSeconds,
+		MoveTime = moveTime,
+		ExpireAt = record.ExpireAt,
+	}
+end
+
+local function pushSpawn(player, record, capsuleInfo, moveTime)
+	if not pushConveyorSpawnEvent or not player or not player.Parent then
+		return
+	end
+	pushConveyorSpawnEvent:FireClient(player, buildSpawnPayload(record, capsuleInfo, moveTime))
+end
+
+local function pushRemove(player, uid)
+	if not pushConveyorRemoveEvent or not player or not player.Parent then
+		return
+	end
+	pushConveyorRemoveEvent:FireClient(player, uid)
 end
 
 local function pickWeightedEntry(list)
@@ -257,6 +332,51 @@ local function moveCapsule(model, startCFrame, endCFrame)
 	end)
 end
 
+if buyConveyorEggEvent then
+	buyConveyorEggEvent.OnServerEvent:Connect(function(player, uid)
+		if not player or not player.Parent then
+			return
+		end
+		if type(uid) ~= "string" or uid == "" then
+			return
+		end
+		local state = running[player.UserId]
+		if not state or not state.Active or type(state.Capsules) ~= "table" then
+			return
+		end
+		local record = state.Capsules[uid]
+		if not record then
+			return
+		end
+		if record.OwnerUserId ~= player.UserId then
+			return
+		end
+		local cooldownNow = os.clock()
+		local last = purchaseCooldowns[player.UserId] or 0
+		if cooldownNow - last < PURCHASE_COOLDOWN then
+			return
+		end
+		purchaseCooldowns[player.UserId] = cooldownNow
+		local now = getServerTimeNow()
+		if record.ExpireAt and now > record.ExpireAt then
+			state.Capsules[uid] = nil
+			pushRemove(player, uid)
+			return
+		end
+		local capsuleInfo = getCapsuleInfo(record.CapsuleId)
+		if not capsuleInfo then
+			state.Capsules[uid] = nil
+			pushRemove(player, uid)
+			return
+		end
+		local ok = EggService:PurchaseCapsule(player, capsuleInfo)
+		if ok then
+			state.Capsules[uid] = nil
+			pushRemove(player, uid)
+		end
+	end)
+end
+
 function ConveyorService:StartForPlayer(player, homeSlot)
 	local homeFolder = homeSlot and homeSlot.Folder
 	if not homeFolder then
@@ -287,7 +407,7 @@ function ConveyorService:StartForPlayer(player, homeSlot)
 	local capsuleFolder = getCapsuleFolder(conveyorFolder)
 	refreshCapsuleBillboards(capsuleFolder, player.UserId)
 
-	local state = { Active = true }
+	local state = { Active = true, Capsules = {} }
 	running[player.UserId] = state
 
 	task.spawn(function()
@@ -299,12 +419,28 @@ function ConveyorService:StartForPlayer(player, homeSlot)
 				capsuleInfo = applyExtraMutation(player, capsuleInfo)
 			end
 			if capsuleInfo then
-				local model = EggService:CreateConveyorCapsule(capsuleInfo, player.UserId)
-				if model then
-					model.Parent = capsuleFolder
-					moveCapsule(model, startCFrame, endCFrame)
-				else
-					warn(string.format("[ConveyorService] CreateConveyorCapsule returned nil for: %s", capsuleInfo.Name))
+				local moveTime = tonumber(GameConfig.ConveyorMoveTime) or 0
+				local uid = HttpService:GenerateGUID(false)
+				local now = getServerTimeNow()
+				local record = {
+					Uid = uid,
+					CapsuleId = capsuleInfo.Id,
+					OwnerUserId = player.UserId,
+					SpawnTime = now,
+					ExpireAt = now + math.max(0, moveTime),
+				}
+				state.Capsules[uid] = record
+				pushSpawn(player, record, capsuleInfo, moveTime)
+				if moveTime > 0 then
+					task.delay(moveTime, function()
+						if not state.Active then
+							return
+						end
+						if state.Capsules[uid] == record then
+							state.Capsules[uid] = nil
+							pushRemove(player, uid)
+						end
+					end)
 				end
 			else
 				warn("[ConveyorService] pickRandomCapsule returned nil")
@@ -318,8 +454,14 @@ function ConveyorService:StopForPlayer(player)
 	local state = running[player.UserId]
 	if state then
 		state.Active = false
+		if type(state.Capsules) == "table" then
+			for uid in pairs(state.Capsules) do
+				pushRemove(player, uid)
+			end
+		end
 		running[player.UserId] = nil
 	end
+	purchaseCooldowns[player.UserId] = nil
 
 	local homeFolder = Workspace:FindFirstChild(GameConfig.HomeFolderName)
 	if not homeFolder then

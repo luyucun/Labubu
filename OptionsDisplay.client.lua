@@ -154,6 +154,47 @@ local function resolveToggle(bg, name)
 	}
 end
 
+local function connectClick(target, callback)
+	if not target or not target:IsA("GuiObject") then
+		return
+	end
+	if target:IsA("GuiButton") then
+		target.Activated:Connect(callback)
+		return
+	end
+	local button = target:FindFirstChildWhichIsA("GuiButton", true)
+	if button and button:IsA("GuiButton") then
+		button.Activated:Connect(callback)
+		return
+	end
+	target.Active = true
+	target.Selectable = true
+	target.InputBegan:Connect(function(input, processed)
+		if processed then
+			return
+		end
+		if input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch then
+			callback()
+		end
+	end)
+end
+
+local function resolveOptionsTarget(root)
+	if not root then
+		return nil
+	end
+	local button = GuiResolver.FindGuiButton(root, "Options")
+	if button then
+		return button
+	end
+	local node = root:FindFirstChild("Options", true)
+	if node and node:IsA("GuiObject") then
+		return node
+	end
+	return nil
+end
+
 local topRightGui = GuiResolver.WaitForLayer(playerGui, { "TopRightGui", "TopRightGUI", "TopRight", "TopRightUI" }, {
 	"Options",
 	"Invite",
@@ -168,11 +209,11 @@ local optionsButton
 if topRightGui then
 	local topBg = topRightGui:FindFirstChild("Bg")
 	if topBg then
-		optionsButton = GuiResolver.FindGuiButton(topBg, "Options")
+		optionsButton = resolveOptionsTarget(topBg)
 	end
 end
 if not optionsButton then
-	optionsButton = GuiResolver.FindGuiButton(playerGui, "Options")
+	optionsButton = resolveOptionsTarget(playerGui)
 end
 
 local optionsGui = GuiResolver.WaitForLayer(playerGui, { "Options", "OptionsGui", "OptionsGUI" }, {
@@ -209,13 +250,16 @@ if optionsBg then
 end
 
 if optionsButton and optionsBg and optionsBg:IsA("GuiObject") then
-	optionsButton.Activated:Connect(function()
+	connectClick(optionsButton, function()
+		if optionsGui and optionsGui:IsA("LayerCollector") then
+			optionsGui.Enabled = true
+		end
 		optionsBg.Visible = true
 	end)
 end
 
 if closeButton and optionsBg and optionsBg:IsA("GuiObject") then
-	closeButton.Activated:Connect(function()
+	connectClick(closeButton, function()
 		optionsBg.Visible = false
 	end)
 end

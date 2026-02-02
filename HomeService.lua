@@ -268,7 +268,6 @@ function HomeService:AssignHome(player)
 	player:SetAttribute("HomeSlot", pickIndex)
 	self:ApplySpawn(player, slot)
 	applyPlayerInfo(player, slot)
-	print(string.format("[HomeService] Assign home: userId=%d slot=%s", player.UserId, formatHomeName(pickIndex)))
 	return slot
 end
 

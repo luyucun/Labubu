@@ -238,7 +238,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Lunar/LBB03",
 		ShowcasePath = "ShowCase/Purple/Position3",
 		ClaimButtonPath = "ButtonPurple/Button3",
-		Icon = "rbxassetid://77847158725505",
+		Icon = "rbxassetid://95648389545585",
 	},
 	{
 		Id = 30004,
@@ -260,7 +260,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Lunar/LBB05",
 		ShowcasePath = "ShowCase/Purple/Position5",
 		ClaimButtonPath = "ButtonPurple/Button5",
-		Icon = "rbxassetid://77847158725505",
+		Icon = "rbxassetid://85748413061627",
 	},
 	{
 		Id = 30006,
@@ -271,7 +271,7 @@ FigurineConfig.Figurines = {
 		ModelResource = "Lunar/LBB06",
 		ShowcasePath = "ShowCase/Purple/Position6",
 		ClaimButtonPath = "ButtonPurple/Button6",
-		Icon = "rbxassetid://98084586375258",
+		Icon = "rbxassetid://131310619551847",
 	},
 	{
 		Id = 30007,

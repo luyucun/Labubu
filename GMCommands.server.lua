@@ -12,6 +12,7 @@ local DataService = require(script.Parent:WaitForChild("DataService"))
 local EggService = require(script.Parent:WaitForChild("EggService"))
 local FigurineService = require(script.Parent:WaitForChild("FigurineService"))
 local ClaimService = require(script.Parent:WaitForChild("ClaimService"))
+local GuideService = require(script.Parent:WaitForChild("GuideService"))
 
 local commands = {}
 
@@ -44,6 +45,25 @@ registerCommand("addcoins", "增加金币，格式: /addcoins 100", function(pla
 	end
 
 	DataService:AddCoins(player, amount)
+end)
+
+registerCommand("adddiamonds", "Add diamonds, format: /adddiamonds 100", function(player, args)
+	local amount = tonumber(args[2])
+	if not amount then
+		warn("[GM] adddiamonds invalid args, format: /adddiamonds 100")
+		return
+	end
+
+	if amount <= 0 then
+		warn("[GM] adddiamonds amount must be > 0")
+		return
+	end
+
+	DataService:AddDiamonds(player, amount)
+end)
+
+registerCommand("resetguide", "Reset guide steps, format: /resetguide", function(player, args)
+	GuideService:ResetGuide(player)
 end)
 
 registerCommand("clearcoins", "清空自己金币，格式: /clearcoins", function(player, args)

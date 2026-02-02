@@ -16,12 +16,47 @@ local FigurineConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForC
 local modulesFolder = ReplicatedStorage:WaitForChild("Modules")
 local BackpackVisibility = require(modulesFolder:WaitForChild("BackpackVisibility"))
 
+local function ensureLabubuEvents()
+	local eventsFolder = ReplicatedStorage:WaitForChild("Events", 10)
+	if not eventsFolder then
+		return nil
+	end
+	return eventsFolder:WaitForChild("LabubuEvents", 10)
+end
+
+local notifyFocusExitEvent
+local function getNotifyFocusExitEvent()
+	if notifyFocusExitEvent and notifyFocusExitEvent.Parent then
+		return notifyFocusExitEvent
+	end
+	local labubuEvents = ensureLabubuEvents()
+	if not labubuEvents then
+		return nil
+	end
+	local event = labubuEvents:FindFirstChild("NotifyCameraFocusExit")
+	if not event then
+		event = labubuEvents:WaitForChild("NotifyCameraFocusExit", 2)
+	end
+	if event and event:IsA("RemoteEvent") then
+		notifyFocusExitEvent = event
+		return event
+	end
+	return nil
+end
+
+local function notifyFocusExit()
+	local event = getNotifyFocusExitEvent()
+	if event then
+		event:FireServer()
+	end
+end
+
 -- 镜头从玩家移动到目标台子的时间（秒）
 local FOCUS_MOVE_TIME = 0.5
 -- 台子升起时长（需与服务端升台动画时长保持一致）
 local PLATFORM_RISE_TIME = 2
 -- 台子升起结束后的额外停顿时间（秒）
-local EXTRA_HOLD_TIME = 1
+local EXTRA_HOLD_TIME = 0.5
 -- 镜头移动缓动类型
 local FOCUS_EASING_STYLE = Enum.EasingStyle.Quad
 -- 镜头移动缓动方向
@@ -29,9 +64,9 @@ local FOCUS_EASING_DIR = Enum.EasingDirection.Out
 -- 镜头到台子的距离（越小越近）
 local FOCUS_DISTANCE = 16
 -- 镜头高度偏移（相对台子中心，越大越高）
-local FOCUS_HEIGHT_OFFSET = 16
+local FOCUS_HEIGHT_OFFSET = 18
 -- 镜头对准点的高度偏移（相对台子中心，（越小越俯视；越大越平视））
-local FOCUS_LOOK_AT_HEIGHT = 0.65
+local FOCUS_LOOK_AT_HEIGHT = 0.9
 -- 镜头正对台子朝向（-1 表示在台子正面，1 表示在台子背面）
 local FOCUS_FACE_SIGN = 1
 -- Exit 按钮等待超时（秒）
@@ -183,6 +218,7 @@ local function bindExitButton()
 		if not active then
 			return
 		end
+		notifyFocusExit()
 		stopFocus(true)
 	end)
 end

@@ -15,26 +15,44 @@ local modules = ReplicatedStorage:WaitForChild("Modules")
 local FormatHelper = require(modules:WaitForChild("FormatHelper"))
 local GuiResolver = require(modules:WaitForChild("GuiResolver"))
 
-local mainGui = GuiResolver.WaitForLayer(playerGui, { "MainGui", "MainGUI", "Main", "MainUI" }, {
+local function resolveCoinLabel()
+	local mainGui = GuiResolver.FindLayer(playerGui, { "MainGui", "MainGUI", "Main", "MainUI" }, {
+		"CoinNum",
+		"CoinBuff",
+		"Bag",
+		"Index",
+		"Home",
+	})
+	if mainGui then
+		local label = GuiResolver.FindDescendant(mainGui, "CoinNum", "TextLabel")
+		if label then
+			return label
+		end
+	end
+	return GuiResolver.FindDescendant(playerGui, "CoinNum", "TextLabel")
+end
+
+-- 角色生成后StarterGui才会复制到PlayerGui，先等待避免误报
+if not player.Character then
+	player.CharacterAdded:Wait()
+end
+
+GuiResolver.WaitForLayer(playerGui, { "MainGui", "MainGUI", "Main", "MainUI" }, {
 	"CoinNum",
 	"CoinBuff",
 	"Bag",
 	"Index",
 	"Home",
-}, 30)
-if not mainGui then
-	warn("[CoinDisplay] MainGui not found")
-end
+}, 60)
 
-local coinLabel = nil
-if mainGui then
-	coinLabel = GuiResolver.FindDescendant(mainGui, "CoinNum", "TextLabel")
+local coinLabel = resolveCoinLabel()
+local deadline = os.clock() + 30
+while not coinLabel and os.clock() < deadline do
+	task.wait(0.2)
+	coinLabel = resolveCoinLabel()
 end
 if not coinLabel then
-	coinLabel = GuiResolver.FindDescendant(playerGui, "CoinNum", "TextLabel")
-end
-if not coinLabel then
-	warn("[CoinDisplay] CoinNum not found")
+	warn("[CoinDisplay] CoinNum not found after waiting for UI")
 	return
 end
 

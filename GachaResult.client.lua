@@ -68,6 +68,15 @@ local rarityNames = {
 	[5] = "Rainbow",
 }
 
+local RARITY_TEXT_COLORS = {
+	[1] = Color3.fromRGB(160, 160, 160),
+	[2] = Color3.fromRGB(255, 255, 255),
+	[3] = Color3.fromRGB(255, 255, 0),
+	[4] = Color3.fromRGB(255, 85, 255),
+}
+
+local rainbowGradientTemplate
+
 local qualityIndicatorNames = {
 	[1] = "Leaf",
 	[2] = "Water",
@@ -190,9 +199,89 @@ local function preloadImageTargets(targets)
 	end
 end
 
+local function resolveTextObject(target)
+	if not target then
+		return nil
+	end
+	if target:IsA("TextLabel") or target:IsA("TextButton") or target:IsA("TextBox") then
+		return target
+	end
+	local label = target:FindFirstChildWhichIsA("TextLabel", true)
+	if label then
+		return label
+	end
+	local button = target:FindFirstChildWhichIsA("TextButton", true)
+	if button then
+		return button
+	end
+	return target:FindFirstChildWhichIsA("TextBox", true)
+end
+
 local function setText(textObject, text)
-	if textObject and textObject:IsA("TextLabel") then
-		textObject.Text = text or ""
+	local target = resolveTextObject(textObject)
+	if target then
+		target.Text = text or ""
+	end
+end
+
+local function getRainbowGradientTemplate()
+	if rainbowGradientTemplate and rainbowGradientTemplate.Parent then
+		return rainbowGradientTemplate
+	end
+	local capsuleInfo = ReplicatedStorage:FindFirstChild("CapsuleInfo")
+	if not capsuleInfo then
+		capsuleInfo = ReplicatedStorage:WaitForChild("CapsuleInfo", 2)
+	end
+	if not capsuleInfo then
+		return nil
+	end
+	local rainbowNode = capsuleInfo:FindFirstChild("Rainbow", true)
+	if not rainbowNode then
+		return nil
+	end
+	local gradient = rainbowNode:FindFirstChildWhichIsA("UIGradient", true)
+	if gradient then
+		rainbowGradientTemplate = gradient
+		return gradient
+	end
+	return nil
+end
+
+local function clearTextGradients(textObject)
+	if not textObject then
+		return
+	end
+	for _, child in ipairs(textObject:GetChildren()) do
+		if child:IsA("UIGradient") then
+			child:Destroy()
+		end
+	end
+end
+
+local function shouldShowRare(rarity)
+	local value = tonumber(rarity) or 0
+	return value > 1
+end
+
+local function applyRareStyle(textObject, rarity)
+	local target = resolveTextObject(textObject)
+	if not target then
+		return
+	end
+	clearTextGradients(target)
+	local rarityValue = tonumber(rarity) or 0
+	if rarityValue == 5 then
+		local template = getRainbowGradientTemplate()
+		if template then
+			local gradient = template:Clone()
+			gradient.Parent = target
+		end
+		target.TextColor3 = Color3.fromRGB(255, 255, 255)
+		return
+	end
+	local color = RARITY_TEXT_COLORS[rarityValue]
+	if color then
+		target.TextColor3 = color
 	end
 end
 
@@ -648,6 +737,7 @@ local function playSequence(payload)
 
 	setBackpackHidden(true)
 
+	-- 等待资源预加载完成
 	waitForAssetsPreloaded(ASSET_PRELOAD_TIMEOUT)
 	if token ~= activeToken.Value then
 		return
@@ -695,11 +785,16 @@ local function playSequence(payload)
 		levelUpFrame.Visible = false
 		setImage(levelUpIcon, figurineInfo.Icon)
 		setText(levelUpName, figurineInfo.Name)
-		setText(levelUpRare, getRarityName(payload.Rarity))
+		if shouldShowRare(payload.Rarity) then
+			setText(levelUpRare, getRarityName(payload.Rarity))
+			applyRareStyle(levelUpRare, payload.Rarity)
+			setVisible(levelUpRare, true)
+		else
+			setVisible(levelUpRare, false)
+		end
 		updateQualityIndicators(levelUpFrame, figurineQuality)
 		setVisible(levelUpIcon, true)
 		setVisible(levelUpName, true)
-		setVisible(levelUpRare, true)
 		setVisible(levelUpSpeed, true)
 	end
 
@@ -721,11 +816,16 @@ local function playSequence(payload)
 	updateQualityIndicators(resultFrame, figurineQuality)
 	setImage(resultIcon, figurineInfo.Icon)
 	setText(resultName, figurineInfo.Name)
-	setText(resultRare, getRarityName(payload.Rarity))
+	if shouldShowRare(payload.Rarity) then
+		setText(resultRare, getRarityName(payload.Rarity))
+		applyRareStyle(resultRare, payload.Rarity)
+		setVisible(resultRare, true)
+	else
+		setVisible(resultRare, false)
+	end
 	setText(resultSpeed, formatSpeedText(tonumber(figurineInfo.BaseRate) or 0))
 	setVisible(resultIcon, true)
 	setVisible(resultName, true)
-	setVisible(resultRare, true)
 	setVisible(resultSpeed, true)
 
 	if payload.IsNew then

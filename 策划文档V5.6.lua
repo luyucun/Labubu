@@ -1646,3 +1646,178 @@ Id	盲盒名字	盲盒品质	盲盒稀有度	盲盒模型名字	盲盒价格	开
 
 关于数据表：
 我把我的这一块的数据表放在这个文件中："D:\RobloxGame\Labubu\Labubu\临时数据表.lua"，你直接读取即可
+
+策划文档V5.3  产速加成药水
+
+概述：我们在游戏中加入药水的道具，使用药水后，可以使基础的金币产出速度提升，这个加成和之前的养成带来的加成以及玩家购买的产速倍率共同生效，以下是计算逻辑：
+1.药水会分不同品质，每个品质的基础加成效果不一样，目前我们分3档药水，药水1是加30%，药水2是加50%，药水3是加100%
+2.每个品质的药水的加成比例是单独计算的，比如品质1+20%，品质2+30%，那么两个药水同时使用时，加成总值就是50%
+
+
+我们之前定的产出最终公式是：最终金币产速=基础产速*稀有度系数*（1+（等级-1）*品质系数）*（1+养成加成）*购买倍率
+现在我们需要把产出加成公式计算为：最终金币产速=基础产速*稀有度系数*（1+（等级-1）*品质系数）*（1+养成加成+购买倍率加成+药水1加成+药水2加成+药水3加成）
+这里需要注意的是：我们之前的购买倍率，比如之前购买的倍率是3倍，那么这里的购买倍率加成数值就是2，如果购买的倍率最终是22倍，那这里的值就是21
+
+每个药水都有使用时间，使用后开始进行倒计时，倒计时结束后，该药水的加成效果消失，同一个品质的药水可以多次叠加使用，使用时在其倒计时上叠加倒计时即可
+比如我有3个品质1的药水，每个生效半小时，那么使用后，进入倒计时，我再使用一个，倒计时就变成1小时
+倒计时是自然时间，比如玩家使用了倒计时3小时的药水，玩到2小时后离线，离线了5小时再上来，这个药水也是失效了的
+
+详细客户端规则：
+
+1.玩家点击StarterGui - MainGui - Option按钮，可以打开药水界面（把StarterGui - Potions - Bg的visible属性改成true）
+2.玩家点击StarterGui - Potions - Bg - Title - CloseButton按钮关闭界面（把StarterGui - Potions - Bg的visible属性改成false）
+3.如果玩家正在使用药水，在倒计时中，则需要把MainGui - Option - Time的内容改成药水倒计时，格式是xx:yy,xx是分钟，yy是秒，注意，哪怕xx特别大比如9000，也是显示分钟，不要转换成小时
+4.如果有两个不同品质的药水同时正在生效中，则这个时间显示时间更迟结束的那个，比如同时使用药水1和药水2，药水1倒计时还有10分钟，药水2倒计时还有25分钟，这里显示的就是25分钟的倒计时
+5.Potions - Bg - Buff1Bg对应药水1，Potions - Bg - Buff2Bg对应药水2，Potions - Bg - Buff3Bg对应药水3
+
+下面我们以药水1的部分来做剩余的客户端逻辑说明，Buff2Bg和Buff3Bg逻辑基本一致
+
+1.Potions - Bg - Buff1Bg - CountDownTime是药水倒计时，如果正在生效中，则需要把倒计时显示出来，这里的格式是：xx:yy:zz，就是小时：分钟：秒，如果这个药水未在生效中，就把Potions - Bg - Buff1Bg - CountDownTime的visible属性设置为false
+2.Potions - Bg - Buff1Bg - RbxButton是一个按钮，点击可以触发对药水1的开发者商品购买，下面表中会配置每个药水对应的开发者商品道具id，购买成功后为玩家发放一个药水1，注意是发放，不是直接使用
+3.每个药水可以通过开发者商品多次购买
+4.Potions - Bg - Buff1Bg - DiamondButton按钮是钻石购买按钮，这里有两种状态，一种是使用钻石购买药水，一种是使用药水的按钮，具体逻辑是：
+    1）如果玩家的这个药水的数量小于1（也就是数量为0），那么需要把DiamondButton - DiamondIcon和DiamondButton - DiamondPrice显示出来，其中DiamondButton - DiamondPrice是一个textlabel，用于显示钻石价格，会在表中配置
+    2）玩家点击按钮可以使用钻石来购买一个这个药水，如果玩家的钻石数不足，则弹出系统提示：Diamond Not Enough！这个提示和盲盒数达到上限的提示方式一致用系统提示，如果钻石够就扣除对应钻石，购买一个按钮
+    3）如果玩家的这个药水的数量大于等于1，则需要把DiamondButton - DiamondIcon和DiamondButton - DiamondPrice隐藏起来，同时把DiamondButton - UseText显示出来，内容是Use（xx），xx是玩家当前这个药水的拥有数量
+    4）玩家点击按钮，则立刻使用该药水成功，增加对应的倒计时时间，扣除对应的药水数量，并立刻开始药水生效
+5.Potions - Bg - DiamondNum是玩家的钻石数量，需要实时更新数值文本，但是这里不使用大数值，这里始终数字是多少就显示多少
+
+我的药水的对应配置是：
+
+Id	名字	加成数值	生效时间（分钟）	钻石价格	开发者商品
+1001	药水1	0.3	30	29	3524122858
+1002	药水2	0.5	30	89	3524122984
+1003	药水3	1	30	199	3524123226
+
+策划文档V5.4 新手引导
+
+概述：我们需要做新手引导，引导玩家去做一些事情
+
+详细规则：
+1.增加三类引导类型：
+    1）在玩家身上与目标点之间出现Beam连线，引导玩家前往目标点
+    2）在ui上，出现手指图ui，引导玩家点击ui
+
+2.关于第一类引导：在玩家与目标点之间生成beam，具体是是：
+    1）在ReplicatedStorage - GuideEffect下，有两个Part，分别是Guide01和Guide02，在两个Part下都各自有一些子节点
+    2）当需要引导时，把Guide01及其所有的子节点（注意是所有）全部复制到玩家身上，并挂在玩家身上，然后把Guide02及其所有子节点挂到目标单位上，这样会在玩家和目标点之间出现一道动态的beam连线，引导玩家前往目标点
+    3）当引导完成时，就将Guide01和Guide02都移除，就算完成了这个引导
+3.关于第二类引导，目前只使用在引导玩家点击背包中的按钮上，具体逻辑是：
+    1）在StarterGui - BackpackGui - BackpackFrame - ItemListFrame - ArmyTemplate下有一个子节点，叫Finger
+    2）当需要引导玩家点击时，就把Finger的Visible属性改成True
+    3）显示出来的情况下，需要有一个不断上下浮动的效果，看起来时引导玩家点击
+    4）当玩家点击后，引导完成，再把Finger隐藏起来
+4.第三类引导是纯显示文本内容，也就是下面说的5的相关的部分，只不过是单纯显示文本
+
+5.每一步引导的时候，都需要在界面上显示对应的引导文本内容，具体逻辑是：
+    1）StarterGui - GuideTips - TipsBg是一个Frame，当需要把引导文本显示出来时，就把TipsBg的Visible属性改成True，需要隐藏就改成False
+    2）StarterGui - GuideTips - TipsBg - Tips是textlabel，用于展示具体的引导文本内容
+    3）当文本出现时，需要做一个大小不断变化的呼吸态效果
+
+具体的引导需求是：
+引导1：玩家进入游戏后，在玩家与传送带上的第一个id为1001的盲盒之间生成Beam连线（类型1），具体的引导文本是：Buy a blind box，玩家购买该盲盒后，引导完成，隐藏引导文本并移除beam连线
+注意：如果链接的盲盒在玩家未购买时，就消失了，则立刻重新寻找一个1001，把Guide02挂给这个新的1002盲盒
+
+引导2：玩家购买盲盒后，在玩家身上与玩家家园的IdleFloor中心生成Beam引导玩家前往目的地（以Player01举例，IdleFloor路径是：Workspace - Home - Player01 - Base - IdleFloor）
+引导文本内容是：Head to the destination
+玩家在到达目的地后引导完成
+注意：如果在这个引导没完成的时候，玩家点击了任意一个背包中的盲盒并放置在地上了，则立刻视为这一步引导已经完成
+
+引导3：玩家达到第二步的目的地后，引导玩家点击背包中的1001这个盲盒，走上面说的类型2的引导表现，引导文本是：Put this blind box on the ground
+玩家点击背包中的盲盒后，立刻视为这一步引导完成
+注意：如果第二步的引导完成前，玩家已经放下了任意一个盲盒，则立刻视为引导2与引导3全部完成
+
+引导4：引导玩家开启盲盒，具体逻辑是：当盲盒放在地上时，如果倒计时结束可以开启了，则立刻显示文本提示：Unbox this blind box，玩家开启后，这一步引导完成
+引导5：开启盲盒后，势必会让玩家获得一个手办在手办台上，这时候需要在这个手办对应的ClaimButton上，和玩家身上，形成一个beam，引导玩家前往领取按钮，引导文本是：Tap to collect cash
+玩家触碰后，视为引导完成
+
+需要加一个Gm工具：重置全部引导，重置后重新开始引导
+
+
+策划文档V5.5 新手礼包
+
+概述：新手礼包是一个通行证，玩家可以购买，但是也只能购买一次
+
+详细规则：
+
+1.玩家点击StarterGui - MainGui - StarterPack按钮，打开新手礼包界面（将StarterGui - StarterPack - Bg的Visible属性改成true）
+2.点击StarterGui - StarterPack - Bg - CloseButton按钮，关闭新手礼包界面（将StarterGui - StarterPack - Bg的Visible属性改成false）
+3.新手礼包通行证id是：1693176659，玩家点击StarterGui - StarterPack - Bg - Buy按钮，触发对这个通行证的购买
+4.购买完成后，为玩家发放盲盒，分别是：1003盲盒2个，1004盲盒2个，1005盲盒2个
+5.购买完成后，需要关闭新手礼包界面，隐藏新手礼包按钮（StarterGui - MainGui - StarterPack），然后立刻弹出购买完成弹框（用和Progression里面领钻石后一样的弹出效果），只是是三个道具领取，然后图标用盲盒的图标
+6.我需要给StarterGui - MainGui - StarterPack - Price下面做渐变效果，我在Price下加了子节点也就是一个UIGradient组件，"C:\Users\ZhuanZ\Desktop\渐变录屏"，这里的彩虹两个字的渐变效果就是我要的渐变动态效果，需要你来实现，就这样不断循环渐变即可
+
+策划文档V5.6
+
+成就Id	成就类型	达成条件（分钟）	钻石奖励数	养成奖励类型	养成奖励数值	奖励文本	成就文本	成就图标资源
+80001	1	5	10	3	0.01	Coin Rate +1%	Play for 5 minutes	rbxassetid://108052821452134
+80002	1	10	10	3	0.02	Coin Rate +2%	Play for 10 minutes	rbxassetid://108052821452134
+80003	1	30	10	3	0.03	Coin Rate +3%	Play for 30 minutes	rbxassetid://108052821452134
+80004	1	60	15	3	0.04	Coin Rate +4%	Play for 1 hour	rbxassetid://108052821452134
+80005	1	180	15	3	0.05	Coin Rate +5%	Play for 3 hours	rbxassetid://108052821452134
+80006	1	300	15	3	0.06	Coin Rate +6%	Play for 5 hours	rbxassetid://108052821452134
+80007	1	420	30	3	0.07	Coin Rate +7%	Play for 7 hours	rbxassetid://108052821452134
+80008	1	600	30	3	0.08	Coin Rate +8%	Play for 10 hours	rbxassetid://108052821452134
+80009	1	900	30	3	0.1	Coin Rate +10%	Play for 15 hours	rbxassetid://108052821452134
+80010	1	1200	30	3	0.12	Coin Rate +12%	Play for 20 hours	rbxassetid://108052821452134
+80011	1	1800	30	3	0.14	Coin Rate +14%	Play for 30 hours	rbxassetid://108052821452134
+80012	1	2400	30	3	0.16	Coin Rate +16%	Play for 40 hours	rbxassetid://108052821452134
+80013	1	3000	50	3	0.18	Coin Rate +18%	Play for 50 hours	rbxassetid://108052821452134
+80014	1	4800	50	3	0.2	Coin Rate +20%	Play for 80 hours	rbxassetid://108052821452134
+80015	1	6000	50	3	0.25	Coin Rate +25%	Play for 100 hours	rbxassetid://108052821452134
+80016	1	9000	50	3	0.3	Coin Rate +30%	Play for 150 hours	rbxassetid://108052821452134
+79001	2	5	10	4	3	Extra Luck +3%	Open 5 Blind Boxes	rbxassetid://100745360383588
+79002	2	30	10	4	6	Extra Luck +6%	Open 30 Blind Boxes	rbxassetid://100745360383588
+79003	2	100	10	4	9	Extra Luck +9%	Open 100 Blind Boxes	rbxassetid://100745360383588
+79004	2	500	20	4	12	Extra Luck +12%	Open 500 Blind Boxes	rbxassetid://100745360383588
+79005	2	1000	20	4	15	Extra Luck +15%	Open 1000 Blind Boxes	rbxassetid://100745360383588
+79006	2	1500	20	4	18	Extra Luck +18%	Open 1500 Blind Boxes	rbxassetid://100745360383588
+79007	2	2000	20	4	21	Extra Luck +21%	Open 2000 Blind Boxes	rbxassetid://100745360383588
+79008	2	3000	30	4	24	Extra Luck +24%	Open 3000 Blind Boxes	rbxassetid://100745360383588
+79009	2	4000	30	4	27	Extra Luck +27%	Open 4000 Blind Boxes	rbxassetid://100745360383588
+79010	2	5000	30	4	30	Extra Luck +30%	Open 5000 Blind Boxes	rbxassetid://100745360383588
+79011	2	6000	30	4	33	Extra Luck +33%	Open 6000 Blind Boxes	rbxassetid://100745360383588
+79012	2	8000	40	4	36	Extra Luck +36%	Open 8000 Blind Boxes	rbxassetid://100745360383588
+79013	2	10000	40	4	39	Extra Luck +39%	Open 10000 Blind Boxes	rbxassetid://100745360383588
+79014	2	12000	50	4	42	Extra Luck +42%	Open 12000 Blind Boxes	rbxassetid://100745360383588
+79015	2	14000	50	4	45	Extra Luck +45%	Open 14000 Blind Boxes	rbxassetid://100745360383588
+79016	2	16000	50	4	48	Extra Luck +48%	Open 16000 Blind Boxes	rbxassetid://100745360383588
+78001	17	10	10	6	0.06	Light Blind Box Mutation Chance +6%	Open 10 Light Blind Boxes	rbxassetid://91025569595788
+78002	17	30	10	6	0.08	Light Blind Box Mutation Chance +8%	Open 30 Light Blind Boxes	rbxassetid://91025569595788
+78003	17	50	10	6	0.1	Light Blind Box Mutation Chance +10%	Open 50 Light Blind Boxes	rbxassetid://91025569595788
+78004	17	100	10	6	0.12	Light Blind Box Mutation Chance +12%	Open 100 Light Blind Boxes	rbxassetid://91025569595788
+78005	17	150	10	6	0.14	Light Blind Box Mutation Chance +14%	Open 150 Light Blind Boxes	rbxassetid://91025569595788
+78006	17	200	10	6	0.16	Light Blind Box Mutation Chance +16%	Open 200 Light Blind Boxes	rbxassetid://91025569595788
+78007	17	300	10	6	0.18	Light Blind Box Mutation Chance +18%	Open 300 Light Blind Boxes	rbxassetid://91025569595788
+78008	17	500	10	6	0.2	Light Blind Box Mutation Chance +20%	Open 500 Light Blind Boxes	rbxassetid://91025569595788
+78009	18	10	10	7	0.06	Gold Blind Box Mutation Chance +6%	Open 10 Gold Blind Boxes	rbxassetid://99762356223447
+78010	18	30	10	7	0.08	Gold Blind Box Mutation Chance +8%	Open 30 Gold Blind Boxes	rbxassetid://99762356223447
+78011	18	50	10	7	0.1	Gold Blind Box Mutation Chance +10%	Open 50 Gold Blind Boxes	rbxassetid://99762356223447
+78012	18	100	10	7	0.12	Gold Blind Box Mutation Chance +12%	Open 100 Gold Blind Boxes	rbxassetid://99762356223447
+78013	18	150	10	7	0.14	Gold Blind Box Mutation Chance +14%	Open 150 Gold Blind Boxes	rbxassetid://99762356223447
+78014	18	200	10	7	0.16	Gold Blind Box Mutation Chance +16%	Open 200 Gold Blind Boxes	rbxassetid://99762356223447
+78015	18	300	10	7	0.18	Gold Blind Box Mutation Chance +18%	Open 300 Gold Blind Boxes	rbxassetid://99762356223447
+78016	18	500	10	7	0.2	Gold Blind Box Mutation Chance +20%	Open 500 Gold Blind Boxes	rbxassetid://99762356223447
+78017	19	10	10	8	0.06	Diamond Blind Box Mutation Chance +6%	Open 10 Diamond Blind Boxes	rbxassetid://73066433210790
+78018	19	30	10	8	0.08	Diamond Blind Box Mutation Chance +8%	Open 30 Diamond Blind Boxes	rbxassetid://73066433210790
+78019	19	50	10	8	0.1	Diamond Blind Box Mutation Chance +10%	Open 50 Diamond Blind Boxes	rbxassetid://73066433210790
+78020	19	100	10	8	0.12	Diamond Blind Box Mutation Chance +12%	Open 100 Diamond Blind Boxes	rbxassetid://73066433210790
+78021	19	150	10	8	0.14	Diamond Blind Box Mutation Chance +14%	Open 150 Diamond Blind Boxes	rbxassetid://73066433210790
+78022	19	200	10	8	0.16	Diamond Blind Box Mutation Chance +16%	Open 200 Diamond Blind Boxes	rbxassetid://73066433210790
+78023	19	300	10	8	0.18	Diamond Blind Box Mutation Chance +18%	Open 300 Diamond Blind Boxes	rbxassetid://73066433210790
+78024	19	500	10	8	0.2	Diamond Blind Box Mutation Chance +20%	Open 500 Diamond Blind Boxes	rbxassetid://73066433210790
+78025	20	10	10	9	0.06	Rainbow Blind Box Mutation Chance +6%	Open 10 Rainbow Blind Boxes	rbxassetid://123395554624809
+78026	20	30	10	9	0.08	Rainbow Blind Box Mutation Chance +8%	Open 30 Rainbow Blind Boxes	rbxassetid://123395554624809
+78027	20	50	10	9	0.1	Rainbow Blind Box Mutation Chance +10%	Open 50 Rainbow Blind Boxes	rbxassetid://123395554624809
+78028	20	100	10	9	0.12	Rainbow Blind Box Mutation Chance +12%	Open 100 Rainbow Blind Boxes	rbxassetid://123395554624809
+78029	20	150	10	9	0.14	Rainbow Blind Box Mutation Chance +14%	Open 150 Rainbow Blind Boxes	rbxassetid://123395554624809
+78030	20	200	10	9	0.16	Rainbow Blind Box Mutation Chance +16%	Open 200 Rainbow Blind Boxes	rbxassetid://123395554624809
+78031	20	300	10	9	0.18	Rainbow Blind Box Mutation Chance +18%	Open 300 Rainbow Blind Boxes	rbxassetid://123395554624809
+78032	20	500	10	9	0.2	Rainbow Blind Box Mutation Chance +20%	Open 500 Rainbow Blind Boxes	rbxassetid://123395554624809
+77001	10	9	10	1	1	Max Placeable Blind Boxes +1	Collect all figurines in the Leaf Blind Box	rbxassetid://131284622139605
+77002	11	9	10	1	1	Max Placeable Blind Boxes +1	Collect all figurines in the Water Blind Box	rbxassetid://119510387965714
+77003	12	9	10	1	1	Max Placeable Blind Boxes +1	Collect all figurines in the Lunar Blind Box	rbxassetid://137875148961886
+77004	13	9	10	1	1	Max Placeable Blind Boxes +1	Collect all figurines in the Solar Blind Box	rbxassetid://110395015182791
+77005	14	7	10	1	1	Max Placeable Blind Boxes +1	Collect all figurines in the Flame Blind Box	rbxassetid://115686630835615
+77006	15	7	10	1	1	Max Placeable Blind Boxes +1	Collect all figurines in the Heart Blind Box	rbxassetid://95301400310853
+77007	16	5	10	1	1	Max Placeable Blind Boxes +1	Collect all figurines in the Celestial Blind Box	rbxassetid://108680777302678

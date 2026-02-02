@@ -30,23 +30,50 @@ end
 
 disableCoreBackpack()
 
-local backpackGui = GuiResolver.WaitForLayer(playerGui, { "BackpackGui", "BackpackGUI", "Backpack" }, {
-	"BackpackFrame",
-	"ItemListFrame",
-	"ArmyTemplate",
-}, 30)
-if not backpackGui then
-	warn("[BackpackDisplay] BackpackGui not found")
-	return
+local function waitForBackpackGui()
+	local gui = GuiResolver.WaitForLayer(playerGui, { "BackpackGui", "BackpackGUI", "Backpack" }, {
+		"BackpackFrame",
+		"ItemListFrame",
+		"ArmyTemplate",
+	}, 30)
+	if gui then
+		return gui
+	end
+	local attempts = 0
+	while not gui do
+		attempts = attempts + 1
+		if attempts % 20 == 0 then
+			warn("[BackpackDisplay] BackpackGui not found, waiting...")
+		end
+		task.wait(0.5)
+		gui = GuiResolver.FindLayer(playerGui, { "BackpackGui", "BackpackGUI", "Backpack" }, {
+			"BackpackFrame",
+			"ItemListFrame",
+			"ArmyTemplate",
+		})
+	end
+	return gui
 end
+
+local function waitForChildSafe(parent, name, tag)
+	local child = parent and parent:FindFirstChild(name)
+	local attempts = 0
+	while not child do
+		attempts = attempts + 1
+		if attempts % 20 == 0 then
+			warn(string.format("[%s] %s not found, waiting...", tag, name))
+		end
+		task.wait(0.5)
+		child = parent and parent:FindFirstChild(name)
+	end
+	return child
+end
+
+local backpackGui = waitForBackpackGui()
 
 BackpackVisibility.Reconcile(playerGui)
 
-local backpackFrame = backpackGui:WaitForChild("BackpackFrame", 10)
-if not backpackFrame then
-	warn("[BackpackDisplay] BackpackFrame not found")
-	return
-end
+local backpackFrame = waitForChildSafe(backpackGui, "BackpackFrame", "BackpackDisplay")
 
 backpackGui.Enabled = true
 backpackGui.DisplayOrder = 50
@@ -54,20 +81,12 @@ backpackGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
 backpackFrame.ZIndex = 10
 backpackFrame.Active = true
 
-local itemListFrame = backpackFrame:WaitForChild("ItemListFrame", 10)
-if not itemListFrame then
-	warn("[BackpackDisplay] ItemListFrame not found")
-	return
-end
+local itemListFrame = waitForChildSafe(backpackFrame, "ItemListFrame", "BackpackDisplay")
 
 itemListFrame.ZIndex = 11
 itemListFrame.Active = true
 
-local template = itemListFrame:WaitForChild("ArmyTemplate", 10)
-if not template then
-	warn("[BackpackDisplay] ArmyTemplate not found")
-	return
-end
+local template = waitForChildSafe(itemListFrame, "ArmyTemplate", "BackpackDisplay")
 
 local templateStroke = template:FindFirstChild("UIStroke", true)
 local defaultStrokeColor = templateStroke and templateStroke.Color or Color3.fromRGB(255, 255, 255)

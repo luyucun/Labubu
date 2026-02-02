@@ -1,9 +1,9 @@
 ﻿--[[
 游戏架构设计文档
-版本: V4.2
-最后更新: 2026-01-21
+版本: V5.0
+最后更新: 2026-02-01
 ]]
-游戏架构设计 V4.2
+游戏架构设计 V5.0
 
 1. 设计原则
 - 服务端权威：货币、随机、产出、升级、存档都在服务端
@@ -28,6 +28,7 @@ ReplicatedStorage/
 - Config/FigurineRateConfig（手办产速系数）
 - Config/QualityConfig（品质图标配置）
 - Config/ProgressionConfig（养成/成就配置）
+- Config/PotionConfig（药水配置）
 - OpenProgresTemplate（盲盒开启进度UI模板）
 - CapsuleInfo（盲盒信息BillboardGui模板）
 - Modules/FormatHelper（数值格式化）
@@ -36,6 +37,7 @@ ReplicatedStorage/
 - Modules/BackpackVisibility（背包隐藏计数与显示状态）
 - Modules/GuiResolver（UI路径容错查找）
 - Events/LabubuEvents（具体见 RemoteEvent列表.lua）
+- GuideEffect（新手引导Beam资源）
 - Capsule（盲盒模型资源）
 - LBB（手办模型资源）
 - Util/RNG, Time, TableUtil, IdUtil
@@ -45,11 +47,14 @@ ServerScriptService/
 - Server/DataService: 会话缓存、节流存档、离线收益、统一数据更新
 - Server/GMCommands: GM命令管理（金币增减/清零/命令列表）
 - Server/HomeService: 生成基地、绑定Owner、缓存关键引用
-- Server/ConveyorService: 按OutputSpeed解锁刷新池，抽品质并做稀有度突变，产蛋与生命周期管理
+- Server/ConveyorService: 按OutputSpeed解锁刷新池，抽品质并做稀有度突变，服务端推送传送带盲盒数据给客户端
 - Server/EggService: 盲盒购买/背包/放置/倒计时
 - Server/FigurineService: 盲盒开盒随机手办/展台摆放/待领取产币与领取触发
 - Server/ClaimService: 领取全部/十倍领取/自动领取/付费买币
 - Server/ProgressionService: 养成/成就进度计算、钻石奖励领取、养成加成生效与同步
+- Server/PotionService: 药水购买/使用/倒计时同步与产速加成
+- Server/GuideService: 新手引导流程控制/Beam指引/提示同步
+- Server/StarterPackService: 新手礼包通行证购买/奖励发放
 - Server/LeaderboardService: 服务器内排行榜（总产速/总游戏时间）
 - Server/FriendBonusService: 同服好友加成统计与属性同步
 - Server/GlobalLeaderboardService: 全局排行榜数据维护与刷新推送
@@ -65,6 +70,9 @@ StarterPlayer/StarterPlayerScripts/
 - UI/BagDisplay: 盲盒背包总览界面显示与筛选
 - UI/IndexDisplay: 手办索引界面显示与筛选/检视入口
 - UI/ProgressionDisplay: 养成成就界面显示/领奖动画/红点提示
+- UI/PotionsDisplay: 药水界面显示/倒计时/购买与使用
+- UI/GuideDisplay: 新手引导提示/手指动效
+- UI/StarterPackDisplay: 新手礼包界面/购买/领取弹框/价格渐变
 - UI/TestInfoDisplay: 统计测试UI显示
 - UI/ErrorHint: 统一错误提示显示
 - UI/GachaResult: 抽卡结果表现与升级进度动画
@@ -75,14 +83,19 @@ StarterPlayer/StarterPlayerScripts/
 - UI/FriendBonusDisplay: 好友加成文本显示
 - UI/OptionsDisplay: 设置界面(BGM/音效开关)与音效播放监听
 - UI/GlobalLeaderboardDisplay: 全局排行榜界面展示与刷新倒计时
-- UI/AssetPreload: 进入游戏前预加载所有图片资源
+- UI/AssetPreload: 统一预加载流程（图片/模型/玩家数据/角色）
+
+ReplicatedFirst/
+- AssetPreload: 游戏启动时的统一预加载脚本（V2.0重构）
 - Client/CameraFocus: 新手办升台镜头聚焦
+- Client/ConveyorDisplay: 传送带盲盒本地生成/移动表现/点击购买请求
 - Client/InteractionController: 点击交互、放置操作、开蛋请求
 - Client/HomeController: 本地展示与提示
 - Client/NetClient: 与服务端通信与数据接收
 
 StarterGui/
 - BackpackGui（自定义背包界面）
+- GuideTips（新手引导提示）
 - Bag（盲盒背包总览界面）
 - Index（手办索引界面）
 - Check（手办检视界面）
@@ -109,6 +122,8 @@ PlayerData
 - CapsuleOpenById: { [CapsuleId] = number }
 - OutputSpeed: number
 - OutputMultiplier: number
+- PotionCounts: { [PotionId] = number }
+- PotionEndTimes: { [PotionId] = unix }
 - AutoCollect: boolean
 - MusicEnabled: boolean
 - SfxEnabled: boolean
@@ -119,6 +134,8 @@ PlayerData
 - FigurineStates: { [FigurineId] = {LastCollectTime, Level, Exp, Rarity} }
 - Pets: { [PetId] = {Unlocked, Level, Rank, Count, LastCollectTime, PendingCoins} }
 - LastLogoutTime: unix
+- GuideStep: number
+- StarterPackPurchased: boolean
 
 说明
 - PendingCoins 为未收取累计，LastCollectTime 用于结算增量，在线/离线共用避免双算
@@ -139,15 +156,19 @@ PlayerData
 - FriendBonusPercent: number
 - OutputMultiplier: number
 - Diamonds: number
+- GuideStep: number
+- StarterPackPurchased: boolean
 
 4. 核心系统职责
 - DataService：会话缓存 + Dirty 标记 + 间隔保存 + BindToClose 兜底，UpdateAsync 持久化，离线结算，统计(在线时长/盲盒开启/总产出速度)，手办升级数据管理
 - GMCommands：GM命令处理（加金币/清金币/命令列表）
 - HomeService：玩家进入创建基地，设置OwnerUserId并缓存节点，维护地板范围/格位信息，更新基地PlayerInfo展示，出生朝向对准ClaimAll
-- ConveyorService：按OutputSpeed选择最高解锁刷新池，抽品质与稀有度突变，按配置间隔产蛋，服务端生成 EggUid，维护索引/最大蛋数/过期清理
+- ConveyorService：按OutputSpeed选择最高解锁刷新池，抽品质与稀有度突变，按配置间隔产蛋；服务端维护在途盲盒列表并推送给客户端，客户端本地移动表现；购买走BuyConveyorEgg回传
 - EggService：盲盒购买校验、背包管理、放置、倒计时、付费开盒与开盒触发
 - FigurineService：开盒随机手办、展台放置、金币待领取/触碰领取、展台信息UI，升级展示
 - ClaimService：领取全部/十倍领取/自动领取通行证/付费买币/产速倍率购买、UI状态切换与自动结算
+- PotionService：药水购买/使用/倒计时同步与产速加成
+- GuideService：新手引导步骤控制、Beam目标挂载、提示文本同步
 - FriendBonusService：同服好友数量统计与加成属性同步，变更时调整产币结算基准
 - GlobalLeaderboardService：全局排行榜数据维护，按分钟刷新并推送榜单
 - PetService：图鉴解锁、PendingCoins 累积、产币结算、升级条件与品阶更新
@@ -155,8 +176,10 @@ PlayerData
 
 5. 核心流程
 - 玩家进入：随机分配空闲 Home 槽位 -> 绑定 SpawnLocation -> 读取数据(默认 Coins=GameConfig.StartCoins)
+- 新手引导：购买任意盲盒 -> 引导至IdleFloor -> 点击背包放置 -> 开盒 -> 退出镜头后触碰领取金币
+- 新手礼包：购买通行证 -> 发放指定盲盒奖励 -> 弹出领取提示并隐藏入口
 - V1.3 流程：传送带按刷新池权重生成盲盒 -> 玩家交互购买 -> 盲盒进背包 -> 放置地面 -> 倒计时结束
-- 传送带产蛋：每个Home独立计时 -> 按OutputSpeed解锁刷新池 -> 权重抽基础品质 -> 稀有度突变确定稀有度 -> 用品质+稀有度映射 CapsuleId -> 建立 EggUid 索引 -> 移动至末端 -> 自动销毁/过期清理
+- 传送带产蛋：每个Home独立计时 -> 按OutputSpeed解锁刷新池 -> 权重抽基础品质 -> 稀有度突变确定稀有度 -> 用品质+稀有度映射 CapsuleId -> 生成在途盲盒Uid并推送客户端 -> 客户端本地移动表现 -> 到期/购买由服务端通知客户端移除
 - 购买蛋：客户端点击 -> 服务端校验(归属/距离/金币/冷却) -> 扣费 -> 入背包 -> 移除蛋
 - 放置蛋：客户端请求 -> 校验位置(在自家地板内/格位) -> 数量上限(MaxPlacedCapsules) -> 占用检测 -> 生成模型 -> 设置HatchEndTime
 - 付费开盲盒：倒计时阶段触发开发者商品购买，完成后直接开盒；若倒计时已结束则改走普通开盒交互
@@ -167,12 +190,14 @@ PlayerData
 - 自动领取通行证：购买后 AutoCollect=true，隐藏ClaimAll/ClaimAllTen，按间隔自动结算
 - 付费买币：CoinAdd按钮请求购买 -> 回执按购买时OutputSpeed * Seconds发放金币
 - 产速倍率购买：DoubleForever按钮请求购买 -> 回执更新OutputMultiplier并刷新产速
+- 药水：Option打开药水界面 -> 购买/使用记录PotionEndTimes -> 过期刷新产速
 - 升级：获得同ID手办累积经验达到 UpgradeConfig 阈值自动升级，达到最高级停止
 - 离线收益：依据离线时长与上限秒数结算，登录时写入 PendingCoins
 - 版本不同步：客户端检测版本缺口 -> RequestResync -> 服务端下发全量快照
 
 6. 产币计算与限制（可调）
- - rate = baseRate * RarityCoeff * (1 + (Level - 1) * QualityCoeff) * (1 + ProgressionBonus) * OutputMultiplier * (1 + 0.1 * FriendCount)
+ - rate = baseRate * RarityCoeff * (1 + (Level - 1) * QualityCoeff) * (1 + ProgressionBonus + PurchaseBonusAdd + PotionBonus1 + PotionBonus2 + PotionBonus3) * (1 + 0.1 * FriendCount)
+ - PurchaseBonusAdd = OutputMultiplier - 1
  - OfflineCapSeconds = GameConfig.OfflineCapSeconds + 养成离线上限加成分钟*60
 - FigurineCoinCapSeconds 控制单个手办未领取累计上限时长
 - 在线收取：按 now - LastCollectTime 结算，不受离线封顶
@@ -194,6 +219,7 @@ PlayerData
 - 抽卡结果播放前等待 AssetsPreloaded，并预加载本次盲盒/手办图标
 - Index列表的CheckIcon进入Check检视界面，ViewportFrame展示手办并支持拖拽旋转（+/-30）
 - Progression按钮打开养成界面，红点提示可领取奖励，ClaimTipsGui播放钻石领取动画
+- GuideTips用于新手引导文本提示，TipsBg呼吸动效；背包条目Finger指引点击
 - 禁用系统背包，背包UI基于工具列表渲染，点击条目装备盲盒
 - 币数展示可基于 ServerTime + PendingCoins 推算，仅作表现
 - CoinNum 从玩家属性 Coins 同步显示，格式遵循 FormatHelper 大数值规则
@@ -214,4 +240,35 @@ PlayerData
 - 新蛋/卡池/宠物仅改配置，不改核心逻辑
 - HomeTemplate可扩展装饰/交互点
 - PetService支持新增收益规则或被动技能
+
+11. 预加载流程（V2.0）
+统一预加载确保玩家进入游戏前所有资源和数据都已就绪
+
+流程时序：
+┌─────────────────────────────────────────────────────────────┐
+│ 客户端 (AssetPreload)         │ 服务端 (Bootstrap)           │
+├─────────────────────────────────────────────────────────────┤
+│ 1. 显示Loading界面            │                              │
+│ 2. 预加载Loading图片          │                              │
+│ 3. 收集配置图片资源           │                              │
+│ 4. 预加载图片 (0-40%)         │ PlayerAdded触发              │
+│ 5. 预加载模型 (40-70%)        │ AssignHome分配家园           │
+│ 6. 等待DataReady (70-90%)     │ LoadPlayer加载数据           │
+│                               │ BindPlayer各服务             │
+│                               │ SetAttribute("DataReady",true)│
+│                               │ PushInitData推送数据         │
+│ 7. 等待角色就绪 (90-100%)     │ LoadCharacterAsync           │
+│ 8. 关闭Loading                │                              │
+│ 9. SetAttribute("AssetsPreloaded",true)                      │
+└─────────────────────────────────────────────────────────────┘
+
+预加载资源清单：
+- 图片资源：CapsuleConfig(Icon/DisplayImage)、FigurineConfig(Icon)、QualityConfig(Icons)、ProgressionConfig(Icon)、Loading图片
+- 模型文件夹：LBB、Capsule、Effect、GuideEffect
+- UI模板：OpenProgresTemplate、CapsuleInfo、InfoPart
+- StarterGui中所有UI图片
+
+关键属性：
+- player.DataReady: 服务端数据加载完成标记（服务端设置）
+- player.AssetsPreloaded: 客户端资源预加载完成标记（客户端设置）
 

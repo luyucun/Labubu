@@ -2,22 +2,22 @@
 脚本名称: AssetPreload
 脚本类型: LocalScript
 脚本位置: ReplicatedFirst/AssetPreload
-版本: V1.4
-职责: 进入游戏前预加载所有图片资源
+版本: V2.0
+职责: 统一预加载流程 - 图片资源/模型/玩家数据全部就绪后才进入游戏
 ]]
 
 local ContentProvider = game:GetService("ContentProvider")
-local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
 local ReplicatedFirst = game:GetService("ReplicatedFirst")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterGui = game:GetService("StarterGui")
-local StarterPack = game:GetService("StarterPack")
-local StarterPlayer = game:GetService("StarterPlayer")
 
 local player = Players.LocalPlayer or Players.PlayerAdded:Wait()
 local playerGui = player:WaitForChild("PlayerGui")
 
+--------------------------------------------------------------------------------
+-- 常量配置
+--------------------------------------------------------------------------------
 local LOADING_IMAGES = {
 	"rbxassetid://97379194248218",
 	"rbxassetid://100148763396788",
@@ -25,18 +25,40 @@ local LOADING_IMAGES = {
 	"rbxassetid://91249044330188",
 }
 
--- 需要预加载的模型文件夹列表
+-- 需要预加载的模型文件夹
 local MODEL_FOLDERS = {
-	"LBB",      -- 手办模型
-	"Capsule",  -- 盲盒模型
-	"Effect",   -- 特效
+	"LBB",
+	"Capsule",
+	"Effect",
+	"GuideEffect",
 }
 
-local CONFIG_WAIT_SECONDS = 30
-local MODEL_FOLDER_WAIT_SECONDS = 30
-local WAIT_INTERVAL_SECONDS = 0.2
+-- 需要预加载的UI模板
+local UI_TEMPLATES = {
+	"OpenProgresTemplate",
+	"CapsuleInfo",
+	"InfoPart",
+}
 
-local function waitForChildSafe(parent, name, timeoutSeconds)
+-- 超时配置
+local CONFIG_WAIT_TIMEOUT = 30
+local DATA_WAIT_TIMEOUT = 60
+local CHARACTER_WAIT_TIMEOUT = 60
+
+-- 进度分配
+local PROGRESS_IMAGE_START = 0
+local PROGRESS_IMAGE_END = 0.4
+local PROGRESS_MODEL_START = 0.4
+local PROGRESS_MODEL_END = 0.7
+local PROGRESS_DATA_START = 0.7
+local PROGRESS_DATA_END = 0.9
+local PROGRESS_CHARACTER_START = 0.9
+local PROGRESS_CHARACTER_END = 1.0
+
+--------------------------------------------------------------------------------
+-- 工具函数
+--------------------------------------------------------------------------------
+local function waitForChildSafe(parent, name, timeout)
 	if not parent then
 		return nil
 	end
@@ -44,26 +66,30 @@ local function waitForChildSafe(parent, name, timeoutSeconds)
 	if child then
 		return child
 	end
-	local timeout = tonumber(timeoutSeconds) or 0
-	local deadline = os.clock() + timeout
+	local deadline = os.clock() + (timeout or 10)
 	while os.clock() < deadline do
 		child = parent:FindFirstChild(name)
 		if child then
 			return child
 		end
-		task.wait(WAIT_INTERVAL_SECONDS)
+		task.wait(0.1)
 	end
 	return parent:FindFirstChild(name)
 end
 
-local function waitForModelFolders()
-	for _, folderName in ipairs(MODEL_FOLDERS) do
-		local folder = waitForChildSafe(ReplicatedStorage, folderName, MODEL_FOLDER_WAIT_SECONDS)
-		if not folder then
-			warn("[AssetPreload] Model folder not found: " .. tostring(folderName))
-		end
+local function isAssetId(value)
+	if type(value) ~= "string" or value == "" then
+		return false
 	end
+	return value:find("rbxassetid://") ~= nil
+		or value:find("rbxasset://") ~= nil
+		or value:find("roblox.com/asset") ~= nil
 end
+
+--------------------------------------------------------------------------------
+-- Loading界面控制
+--------------------------------------------------------------------------------
+local loadingState = nil
 
 local function resolveLoadingGui()
 	local loadingGui = playerGui:FindFirstChild("Loading")
@@ -81,7 +107,7 @@ local function resolveLoadingGui()
 	return loadingGui
 end
 
-local function resolveLoadingState()
+local function initLoadingState()
 	local loadingGui = resolveLoadingGui()
 	if not loadingGui then
 		return nil
@@ -100,88 +126,164 @@ local function resolveLoadingState()
 	}
 end
 
-local function setLoadingVisible(state, visible)
-	if not state then
+local function setLoadingVisible(visible)
+	if not loadingState then
 		return
 	end
-	if state.Gui and state.Gui:IsA("LayerCollector") then
-		state.Gui.Enabled = true
+	if loadingState.Gui and loadingState.Gui:IsA("LayerCollector") then
+		loadingState.Gui.Enabled = true
 	end
-	if state.Bg and state.Bg:IsA("GuiObject") then
-		state.Bg.Visible = visible == true
+	if loadingState.Bg and loadingState.Bg:IsA("GuiObject") then
+		loadingState.Bg.Visible = visible == true
 	end
 end
 
-local function setLoadingProgress(state, progress)
-	if not state then
+local function setLoadingProgress(progress)
+	if not loadingState then
 		return
 	end
 	local clamped = math.clamp(progress or 0, 0, 1)
-	if state.Progressbar and state.Progressbar:IsA("GuiObject") then
-		local size = state.Progressbar.Size
-		state.Progressbar.Size = UDim2.new(clamped, size.X.Offset, size.Y.Scale, size.Y.Offset)
+	if loadingState.Progressbar and loadingState.Progressbar:IsA("GuiObject") then
+		local size = loadingState.Progressbar.Size
+		loadingState.Progressbar.Size = UDim2.new(clamped, size.X.Offset, size.Y.Scale, size.Y.Offset)
 	end
-	if state.Number and state.Number:IsA("TextLabel") then
-		state.Number.Text = string.format("%d%%", math.floor(clamped * 100 + 0.5))
+	if loadingState.Number and loadingState.Number:IsA("TextLabel") then
+		loadingState.Number.Text = string.format("%d%%", math.floor(clamped * 100 + 0.5))
 	end
 end
 
-local function setRandomLoadingImage(state)
-	if not state or not state.LoadingImage or #LOADING_IMAGES == 0 then
+local function setRandomLoadingImage()
+	if not loadingState or not loadingState.LoadingImage or #LOADING_IMAGES == 0 then
 		return nil
 	end
-	if state.LoadingImage:IsA("ImageLabel") or state.LoadingImage:IsA("ImageButton") then
+	if loadingState.LoadingImage:IsA("ImageLabel") or loadingState.LoadingImage:IsA("ImageButton") then
 		local image = LOADING_IMAGES[math.random(1, #LOADING_IMAGES)]
-		state.LoadingImage.Image = image
+		loadingState.LoadingImage.Image = image
 		return image
 	end
 	return nil
 end
 
-local function preloadLoadingImage(image)
-	if type(image) ~= "string" or image == "" then
-		return
+local function createGuiBlocker(rootGui)
+	if not rootGui then
+		return nil
 	end
-	pcall(function()
-		ContentProvider:PreloadAsync({ image })
+	local states = {}
+	local active = true
+
+	local function captureAndDisable(gui)
+		if not active or not gui or not gui:IsA("LayerCollector") then
+			return
+		end
+		if gui.Name == "Loading" then
+			return
+		end
+		if states[gui] == nil then
+			states[gui] = gui.Enabled
+		end
+		gui.Enabled = false
+	end
+
+	for _, child in ipairs(rootGui:GetChildren()) do
+		captureAndDisable(child)
+	end
+
+	local conn
+	conn = rootGui.ChildAdded:Connect(function(child)
+		captureAndDisable(child)
 	end)
+
+	return {
+		Restore = function()
+			active = false
+			if conn then
+				conn:Disconnect()
+			end
+			for gui, enabled in pairs(states) do
+				if gui and gui.Parent then
+					gui.Enabled = enabled
+				end
+			end
+		end,
+	}
 end
 
-local function setPreloadState(ready)
-	if player and player.Parent then
-		player:SetAttribute("AssetsPreloaded", ready == true)
-	end
-end
+--------------------------------------------------------------------------------
+-- 资源收集
+--------------------------------------------------------------------------------
+local function collectConfigAssets()
+	local assets = {}
+	local seen = {}
 
-local function isAssetId(value)
-	if type(value) ~= "string" or value == "" then
-		return false
+	local function addAsset(assetId)
+		if type(assetId) == "string" and assetId ~= "" and isAssetId(assetId) and not seen[assetId] then
+			seen[assetId] = true
+			table.insert(assets, assetId)
+		end
 	end
-	if value:find("rbxassetid://") then
-		return true
-	end
-	if value:find("rbxasset://") then
-		return true
-	end
-	if value:find("http://www.roblox.com/asset") or value:find("https://www.roblox.com/asset") then
-		return true
-	end
-	return false
-end
 
-local function collectAssetsFromConfigs(assets, seen)
-	local configFolder = waitForChildSafe(ReplicatedStorage, "Config", CONFIG_WAIT_SECONDS)
+	-- Loading图片
+	for _, img in ipairs(LOADING_IMAGES) do
+		addAsset(img)
+	end
+
+	local configFolder = waitForChildSafe(ReplicatedStorage, "Config", CONFIG_WAIT_TIMEOUT)
 	if not configFolder then
-		warn("[AssetPreload] Config folder not found in ReplicatedStorage")
-		return
+		warn("[AssetPreload] Config folder not found")
+		return assets
 	end
 
+	-- CapsuleConfig - 盲盒图标和展示图
+	local capsuleConfig = configFolder:FindFirstChild("CapsuleConfig")
+	if capsuleConfig then
+		local ok, config = pcall(require, capsuleConfig)
+		if ok and config and config.Capsules then
+			for _, capsule in ipairs(config.Capsules) do
+				addAsset(capsule.Icon)
+				addAsset(capsule.DisplayImage)
+			end
+		end
+	end
+
+	-- FigurineConfig - 手办图标
+	local figurineConfig = configFolder:FindFirstChild("FigurineConfig")
+	if figurineConfig then
+		local ok, config = pcall(require, figurineConfig)
+		if ok and config and config.Figurines then
+			for _, figurine in ipairs(config.Figurines) do
+				addAsset(figurine.Icon)
+			end
+		end
+	end
+
+	-- QualityConfig - 品质图标
+	local qualityConfig = configFolder:FindFirstChild("QualityConfig")
+	if qualityConfig then
+		local ok, config = pcall(require, qualityConfig)
+		if ok and config and config.Icons then
+			for _, icon in pairs(config.Icons) do
+				addAsset(icon)
+			end
+		end
+	end
+
+	-- ProgressionConfig - 成就图标
+	local progressionConfig = configFolder:FindFirstChild("ProgressionConfig")
+	if progressionConfig then
+		local ok, config = pcall(require, progressionConfig)
+		if ok and config and config.Achievements then
+			for _, achievement in ipairs(config.Achievements) do
+				addAsset(achievement.Icon)
+			end
+		end
+	end
+
+	-- 递归扫描所有配置模块中的资源ID
 	local visited = {}
 	local function scanTable(value)
 		if type(value) ~= "table" then
-			if isAssetId(value) and not seen[value] then
-				seen[value] = true
-				table.insert(assets, value)
+			if isAssetId(value) then
+				addAsset(value)
 			end
 			return
 		end
@@ -202,78 +304,23 @@ local function collectAssetsFromConfigs(assets, seen)
 			end
 		end
 	end
+
+	return assets
 end
 
--- 手动收集所有已知的图片资源（确保不遗漏）
-local function collectKnownAssets(assets, seen)
-	local function addAsset(assetId)
-		if type(assetId) == "string" and assetId ~= "" and not seen[assetId] then
-			seen[assetId] = true
-			table.insert(assets, assetId)
-		end
-	end
+local function collectInstanceAssets(containers)
+	local assets = {}
+	local seen = {}
 
-	local configFolder = waitForChildSafe(ReplicatedStorage, "Config", CONFIG_WAIT_SECONDS)
-	if not configFolder then
-		warn("[AssetPreload] Config folder not found in ReplicatedStorage")
-		return
-	end
-
-	-- Loading图片
-	for _, img in ipairs(LOADING_IMAGES) do
-		addAsset(img)
-	end
-
-	-- 从CapsuleConfig收集
-	local capsuleConfig = configFolder:FindFirstChild("CapsuleConfig")
-	if capsuleConfig then
-		local ok, config = pcall(require, capsuleConfig)
-		if ok and config and config.Capsules then
-			for _, capsule in ipairs(config.Capsules) do
-				addAsset(capsule.Icon)
-				addAsset(capsule.DisplayImage)
-			end
-		end
-	end
-
-	-- 从FigurineConfig收集
-	local figurineConfig = configFolder:FindFirstChild("FigurineConfig")
-	if figurineConfig then
-		local ok, config = pcall(require, figurineConfig)
-		if ok and config and config.Figurines then
-			for _, figurine in ipairs(config.Figurines) do
-				addAsset(figurine.Icon)
-			end
-		end
-	end
-
-	-- 从QualityConfig收集
-	local qualityConfig = configFolder:FindFirstChild("QualityConfig")
-	if qualityConfig then
-		local ok, config = pcall(require, qualityConfig)
-		if ok and config and config.Icons then
-			for _, icon in pairs(config.Icons) do
-				addAsset(icon)
-			end
-		end
-	end
-end
-
-local function collectAssetsFromInstances(assets, seen)
-	assets = assets or {}
-	seen = seen or {}
 	local function addAsset(value)
-		if not isAssetId(value) then
-			return
-		end
-		if seen[value] then
+		if not isAssetId(value) or seen[value] then
 			return
 		end
 		seen[value] = true
 		table.insert(assets, value)
 	end
 
-	local function addFromInstance(instance)
+	local function scanInstance(instance)
 		if instance:IsA("ImageLabel") or instance:IsA("ImageButton") then
 			addAsset(instance.Image)
 		elseif instance:IsA("Decal") or instance:IsA("Texture") then
@@ -291,37 +338,25 @@ local function collectAssetsFromInstances(assets, seen)
 			addAsset(instance.MetalnessMap)
 			addAsset(instance.NormalMap)
 			addAsset(instance.RoughnessMap)
-		elseif instance:IsA("Sky") then
-			addAsset(instance.SkyboxBk)
-			addAsset(instance.SkyboxDn)
-			addAsset(instance.SkyboxFt)
-			addAsset(instance.SkyboxLf)
-			addAsset(instance.SkyboxRt)
-			addAsset(instance.SkyboxUp)
 		end
 	end
 
-	local function scan(container)
+	local function scanContainer(container)
 		if not container then
 			return
 		end
 		for _, instance in ipairs(container:GetDescendants()) do
-			addFromInstance(instance)
+			scanInstance(instance)
 		end
 	end
 
-	scan(ReplicatedStorage)
-	scan(StarterGui)
-	scan(StarterPlayer)
-	scan(StarterPack)
-	scan(Lighting)
-	scan(workspace)
-	scan(playerGui)
+	for _, container in ipairs(containers) do
+		scanContainer(container)
+	end
 
 	return assets
 end
 
--- 收集模型实例用于预加载（返回实例数组，与资源字符串分开处理）
 local function collectModelInstances()
 	local instances = {}
 	local seen = {}
@@ -334,11 +369,10 @@ local function collectModelInstances()
 		table.insert(instances, instance)
 	end
 
-	-- 遍历所有模型文件夹
+	-- 模型文件夹
 	for _, folderName in ipairs(MODEL_FOLDERS) do
 		local folder = ReplicatedStorage:FindFirstChild(folderName)
 		if folder then
-			-- 添加文件夹下所有模型
 			for _, descendant in ipairs(folder:GetDescendants()) do
 				if descendant:IsA("Model") or descendant:IsA("MeshPart") or descendant:IsA("BasePart") then
 					addInstance(descendant)
@@ -347,153 +381,221 @@ local function collectModelInstances()
 		end
 	end
 
-	-- 预加载UI模板
-	local templates = {
-		"OpenProgresTemplate",
-		"CapsuleInfo",
-		"InfoPart",
-	}
-	for _, templateName in ipairs(templates) do
+	-- UI模板
+	for _, templateName in ipairs(UI_TEMPLATES) do
 		local template = ReplicatedStorage:FindFirstChild(templateName)
 		if template then
 			addInstance(template)
+			for _, descendant in ipairs(template:GetDescendants()) do
+				addInstance(descendant)
+			end
 		end
 	end
 
 	return instances
 end
 
-local function preloadAssets(assets, onProgress, startProgress, endProgress)
-	startProgress = startProgress or 0
-	endProgress = endProgress or 1
-	local batchSize = 40
-	local total = #assets
+--------------------------------------------------------------------------------
+-- 预加载执行
+--------------------------------------------------------------------------------
+local function preloadBatch(items, onProgress, startProgress, endProgress)
+	local total = #items
 	if total <= 0 then
 		if onProgress then
 			onProgress(endProgress)
 		end
-		return true
+		return
 	end
-	local loaded = 0
-	local progressRange = endProgress - startProgress
-	for startIndex = 1, total, batchSize do
-		local batch = {}
-		for index = startIndex, math.min(total, startIndex + batchSize - 1) do
-			table.insert(batch, assets[index])
-		end
-		local ok = pcall(function()
-			ContentProvider:PreloadAsync(batch)
-		end)
-		if ok then
-			loaded += #batch
-			if onProgress then
-				onProgress(startProgress + (loaded / total) * progressRange)
-			end
-		else
-			for _, asset in ipairs(batch) do
-				pcall(function()
-					ContentProvider:PreloadAsync({ asset })
-				end)
-				loaded += 1
-				if onProgress then
-					onProgress(startProgress + (loaded / total) * progressRange)
-				end
-			end
-		end
-	end
-	return true
-end
 
--- 预加载实例（模型等）
-local function preloadInstances(instances, onProgress, startProgress, endProgress)
-	startProgress = startProgress or 0
-	endProgress = endProgress or 1
-	local total = #instances
-	if total <= 0 then
-		if onProgress then
-			onProgress(endProgress)
-		end
-		return true
-	end
+	local batchSize = 30
 	local loaded = 0
 	local progressRange = endProgress - startProgress
-	local batchSize = 10
+
 	for startIndex = 1, total, batchSize do
 		local batch = {}
 		for index = startIndex, math.min(total, startIndex + batchSize - 1) do
-			table.insert(batch, instances[index])
+			table.insert(batch, items[index])
 		end
+
 		pcall(function()
 			ContentProvider:PreloadAsync(batch)
 		end)
-		loaded += #batch
+
+		loaded = loaded + #batch
 		if onProgress then
 			onProgress(startProgress + (loaded / total) * progressRange)
 		end
 	end
-	return true
 end
 
-setPreloadState(false)
-if script.Parent ~= ReplicatedFirst then
-	warn("[AssetPreload] Script should be placed under ReplicatedFirst.")
+--------------------------------------------------------------------------------
+-- 数据等待
+--------------------------------------------------------------------------------
+local function waitForPlayerData(timeout)
+	local startTime = os.clock()
+	local eventsFolder = waitForChildSafe(ReplicatedStorage, "Events", 10)
+	if not eventsFolder then
+		warn("[AssetPreload] Events folder not found")
+		return false
+	end
+
+	local labubuEvents = waitForChildSafe(eventsFolder, "LabubuEvents", 10)
+	if not labubuEvents then
+		warn("[AssetPreload] LabubuEvents folder not found")
+		return false
+	end
+
+	-- 等待PushInitData事件存在
+	local pushInitData = waitForChildSafe(labubuEvents, "PushInitData", 10)
+
+	-- 等待玩家数据就绪标记
+	while os.clock() - startTime < timeout do
+		if player:GetAttribute("DataReady") == true then
+			return true
+		end
+		task.wait(0.1)
+	end
+
+	-- 超时后检查是否有角色（作为备用判断）
+	if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+		return true
+	end
+
+	warn("[AssetPreload] Timeout waiting for player data")
+	return false
 end
-ReplicatedFirst:RemoveDefaultLoadingScreen()
 
-math.randomseed(os.clock() * 100000)
-local loadingState = resolveLoadingState()
-local selectedLoadingImage = nil
-if loadingState then
-	selectedLoadingImage = setRandomLoadingImage(loadingState)
-	setLoadingProgress(loadingState, 0)
-	setLoadingVisible(loadingState, true)
-	preloadLoadingImage(selectedLoadingImage)
+local function waitForCharacter(timeout)
+	local startTime = os.clock()
+	while os.clock() - startTime < timeout do
+		local character = player.Character
+		if character and character.Parent then
+			local humanoid = character:FindFirstChildOfClass("Humanoid")
+			local rootPart = character:FindFirstChild("HumanoidRootPart")
+			if humanoid and rootPart then
+				return true
+			end
+		end
+		task.wait(0.1)
+	end
+	return false
 end
 
--- 收集所有图片资源ID
-local allAssets = {}
-local seen = {}
-
--- 1. 手动收集已知配置中的图片资源（最可靠）
-collectKnownAssets(allAssets, seen)
-
--- 2. 从配置表递归收集资源（补充）
-collectAssetsFromConfigs(allAssets, seen)
-
--- 3. 等待游戏加载完成
-if not game:IsLoaded() then
-	game.Loaded:Wait()
-end
-task.wait()
-
--- 4. 从实例中收集图片资源
-waitForModelFolders()
-collectAssetsFromInstances(allAssets, seen)
-
--- 5. 收集模型实例（单独处理）
-local modelInstances = collectModelInstances()
-
--- 输出调试信息
-print("[AssetPreload] Collected " .. #allAssets .. " image assets, " .. #modelInstances .. " model instances")
-
--- 进度回调
-local function updateProgress(progress)
-	if not loadingState then
+local function ensureCameraSubject()
+	local character = player.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then
 		return
 	end
-	setLoadingProgress(loadingState, progress)
+	local camera = workspace.CurrentCamera
+	if not camera then
+		return
+	end
+	camera.CameraType = Enum.CameraType.Custom
+	camera.CameraSubject = humanoid
 end
 
--- 分阶段预加载：
--- 阶段1: 图片资源 (0% - 60%)
--- 阶段2: 模型实例 (60% - 100%)
-preloadAssets(allAssets, updateProgress, 0, 0.6)
-preloadInstances(modelInstances, updateProgress, 0.6, 1)
+--------------------------------------------------------------------------------
+-- 主流程
+--------------------------------------------------------------------------------
+local function main()
+	-- 标记未完成
+	player:SetAttribute("AssetsPreloaded", false)
+	local guiBlocker = createGuiBlocker(playerGui)
 
-if loadingState then
-	setLoadingProgress(loadingState, 1)
+	-- 移除默认Loading
+	ReplicatedFirst:RemoveDefaultLoadingScreen()
+
+	-- 初始化Loading界面
+	math.randomseed(os.clock() * 100000)
+	loadingState = initLoadingState()
+
+	if loadingState then
+		local loadingImage = setRandomLoadingImage()
+		setLoadingProgress(0)
+		setLoadingVisible(true)
+
+		-- 先预加载Loading图片本身
+		if loadingImage then
+			pcall(function()
+				ContentProvider:PreloadAsync({ loadingImage })
+			end)
+		end
+	end
+
+	-- 等待游戏基础加载
+	if not game:IsLoaded() then
+		game.Loaded:Wait()
+	end
+	task.wait()
+
+	-- 阶段1: 收集并预加载图片资源 (0% - 40%)
+	local imageAssets = collectConfigAssets()
+
+	-- 从UI容器收集额外图片
+	local uiContainers = { StarterGui, playerGui }
+	for _, templateName in ipairs(UI_TEMPLATES) do
+		local template = ReplicatedStorage:FindFirstChild(templateName)
+		if template then
+			table.insert(uiContainers, template)
+		end
+	end
+	local uiAssets = collectInstanceAssets(uiContainers)
+	for _, asset in ipairs(uiAssets) do
+		local found = false
+		for _, existing in ipairs(imageAssets) do
+			if existing == asset then
+				found = true
+				break
+			end
+		end
+		if not found then
+			table.insert(imageAssets, asset)
+		end
+	end
+
+	preloadBatch(imageAssets, setLoadingProgress, PROGRESS_IMAGE_START, PROGRESS_IMAGE_END)
+
+	-- 阶段2: 预加载模型实例 (40% - 70%)
+
+	-- 等待模型文件夹存在
+	for _, folderName in ipairs(MODEL_FOLDERS) do
+		waitForChildSafe(ReplicatedStorage, folderName, 10)
+	end
+
+	local modelInstances = collectModelInstances()
+	preloadBatch(modelInstances, setLoadingProgress, PROGRESS_MODEL_START, PROGRESS_MODEL_END)
+
+	-- 阶段3: 等待玩家数据 (70% - 90%)
+	setLoadingProgress(PROGRESS_DATA_START)
+
+	waitForPlayerData(DATA_WAIT_TIMEOUT)
+	setLoadingProgress(PROGRESS_DATA_END)
+
+	-- 阶段4: 等待角色就绪 (90% - 100%)
+	setLoadingProgress(PROGRESS_CHARACTER_START)
+
+	local characterReady = waitForCharacter(CHARACTER_WAIT_TIMEOUT)
+	if characterReady then
+		ensureCameraSubject()
+	end
+
+	setLoadingProgress(PROGRESS_CHARACTER_END)
+
+	-- 完成
 	task.wait(0.2) -- 短暂停留让玩家看到100%
-	setLoadingVisible(loadingState, false)
+
+	-- 标记完成
+	player:SetAttribute("AssetsPreloaded", true)
+
+	-- 关闭Loading界面
+	if loadingState then
+		setLoadingVisible(false)
+	end
+	if guiBlocker then
+		guiBlocker.Restore()
+	end
 end
 
-setPreloadState(true)
+-- 执行主流程
+main()

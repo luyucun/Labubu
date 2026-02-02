@@ -18,6 +18,7 @@ local FormatHelper = require(ReplicatedStorage:WaitForChild("Modules"):WaitForCh
 local DataService = require(script.Parent:WaitForChild("DataService"))
 local FigurineService = require(script.Parent:WaitForChild("FigurineService"))
 local EggService = require(script.Parent:WaitForChild("EggService"))
+local PotionService = require(script.Parent:WaitForChild("PotionService"))
 
 local ClaimService = {}
 ClaimService.__index = ClaimService
@@ -797,6 +798,10 @@ function ClaimService:Init()
 			if expected and expected.ProductId == productId then
 				DataService:SetOutputMultiplier(player, expected.Multiplier)
 			end
+			return Enum.ProductPurchaseDecision.PurchaseGranted
+		end
+
+		if PotionService and PotionService:HandleReceipt(player, receiptInfo.ProductId) then
 			return Enum.ProductPurchaseDecision.PurchaseGranted
 		end
 

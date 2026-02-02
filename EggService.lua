@@ -20,6 +20,7 @@ local FormatHelper = require(ReplicatedStorage:WaitForChild("Modules"):WaitForCh
 local DataService = require(script.Parent:WaitForChild("DataService"))
 local FigurineService = require(script.Parent:WaitForChild("FigurineService"))
 local ProgressionService = require(script.Parent:WaitForChild("ProgressionService"))
+local GuideService = require(script.Parent:WaitForChild("GuideService"))
 
 local EggService = {}
 EggService.__index = EggService
@@ -30,6 +31,7 @@ local playerStackIndex = {} -- [userId] = number
 local paidOpenRequests = {} -- [userId] = {EggUid, ProductId}
 
 local PAID_PROMPT_ATTACHMENT = "CapsulePaidPrompt"
+local PAID_OPEN_REQUEST_TIMEOUT = 30
 local RARITY_LABELS = {
 	[2] = "Light",
 	[3] = "Gold",
@@ -113,6 +115,24 @@ end
 
 local placeEggEvent = ensurePlaceEggEvent()
 
+MarketplaceService.PromptProductPurchaseFinished:Connect(function(userId, productId, purchased)
+	if purchased == true then
+		return
+	end
+	local player = Players:GetPlayerByUserId(userId)
+	if not player then
+		return
+	end
+	local pending = paidOpenRequests[player.UserId]
+	if not pending then
+		return
+	end
+	local normalized = tonumber(productId) or productId
+	if pending.ProductId == normalized then
+		paidOpenRequests[player.UserId] = nil
+	end
+end)
+
 local function sendErrorHint(player, code, message)
 	if not player or not player.Parent or not errorHintEvent then
 		return
@@ -138,6 +158,12 @@ local function toVectorTable(vec)
 end
 
 local function fromVectorTable(data)
+	if typeof(data) == "Vector3" then
+		return data
+	end
+	if typeof(data) == "CFrame" then
+		return data.Position
+	end
 	if type(data) ~= "table" then
 		return nil
 	end
@@ -156,6 +182,13 @@ local function toRotationTable(cframe)
 end
 
 local function fromRotationTable(data)
+	if typeof(data) == "Vector3" then
+		return data.X, data.Y, data.Z
+	end
+	if typeof(data) == "CFrame" then
+		local rx, ry, rz = data:ToOrientation()
+		return rx, ry, rz
+	end
 	if type(data) ~= "table" then
 		return 0, 0, 0
 	end
@@ -407,6 +440,14 @@ local function ensureLocalPlacedEntry(player, entry, idleFloor)
 
 	local worldCFrame = buildCFrame(entry.Position, entry.Rotation)
 	if not worldCFrame then
+		if idleFloor then
+			local localPosition, localRotation = toLocalData(idleFloor.CFrame, idleFloor.CFrame)
+			entry.Position = localPosition
+			entry.Rotation = localRotation
+			entry.IsLocal = true
+			DataService:MarkDirty(player)
+			return true
+		end
 		return false
 	end
 
@@ -429,10 +470,14 @@ end
 local function setAnchored(model, anchored)
 	if model:IsA("BasePart") then
 		model.Anchored = anchored
+		model.CanCollide = false
+		model.CanQuery = true
 	end
 	for _, obj in ipairs(model:GetDescendants()) do
 		if obj:IsA("BasePart") then
 			obj.Anchored = anchored
+			obj.CanCollide = false
+			obj.CanQuery = true
 		end
 	end
 end
@@ -866,6 +911,26 @@ function EggService:CreateConveyorCapsule(capsuleInfo, ownerUserId)
 	return model
 end
 
+function EggService:PurchaseCapsule(player, capsuleInfo)
+	if not player or not player.Parent then
+		return false
+	end
+	if not capsuleInfo then
+		return false
+	end
+	local coins = DataService:GetCoins(player)
+	if coins < capsuleInfo.Price then
+		return false
+	end
+	DataService:AddCoins(player, -capsuleInfo.Price)
+	DataService:AddEgg(player, capsuleInfo.Id)
+	self:GiveCapsuleTool(player, capsuleInfo)
+	if GuideService then
+		GuideService:HandleEggPurchased(player, capsuleInfo.Id)
+	end
+	return true
+end
+
 function EggService:HandlePurchase(player, model, capsuleInfo)
 	if not player or not player.Parent then
 		return
@@ -879,16 +944,11 @@ function EggService:HandlePurchase(player, model, capsuleInfo)
 	if model:GetAttribute("OwnerUserId") ~= player.UserId then
 		return
 	end
-
-	local coins = DataService:GetCoins(player)
-	if coins < capsuleInfo.Price then
+	local ok = self:PurchaseCapsule(player, capsuleInfo)
+	if not ok then
 		return
 	end
-
 	model:SetAttribute("IsSold", true)
-	DataService:AddCoins(player, -capsuleInfo.Price)
-	DataService:AddEgg(player, capsuleInfo.Id)
-	self:GiveCapsuleTool(player, capsuleInfo)
 	model:Destroy()
 end
 
@@ -951,6 +1011,9 @@ function EggService:HandleOpen(player, model, ignoreReady)
 			UpgradeConfig.GetMaxLevel()
 		)
 	end
+	if GuideService and figurineInfo then
+		GuideService:HandleEggOpened(player, figurineInfo.Id)
+	end
 	model:Destroy()
 end
 
@@ -982,14 +1045,21 @@ function EggService:HandlePaidOpenPrompt(player, model)
 		return
 	end
 
+	local now = os.clock()
 	local pending = paidOpenRequests[player.UserId]
-	if pending and pending.EggUid ~= eggUid then
-		return
+	if pending then
+		if pending.RequestedAt and now - pending.RequestedAt > PAID_OPEN_REQUEST_TIMEOUT then
+			paidOpenRequests[player.UserId] = nil
+			pending = nil
+		elseif pending.EggUid ~= eggUid then
+			return
+		end
 	end
 
 	paidOpenRequests[player.UserId] = {
 		EggUid = eggUid,
 		ProductId = productId,
+		RequestedAt = now,
 	}
 	MarketplaceService:PromptProductPurchase(player, productId)
 end
@@ -1253,6 +1323,9 @@ function EggService:PlaceFromTool(player, tool, targetWorldPosition)
 		Rotation = localRotation,
 		IsLocal = true,
 	})
+	if GuideService then
+		GuideService:HandleEggPlaced(player)
+	end
 
 	local newCount = getStackCount(tool) - 1
 	local shouldEquipNext = newCount <= 0
@@ -1411,7 +1484,7 @@ function EggService:RestorePlayer(player)
 			else
 				local capsuleInfo = getCapsuleInfo(eggId)
 				if not capsuleInfo then
-					table.insert(invalidEggs, entry)
+					warn(string.format("[EggService] CapsuleConfig missing eggId=%s for userId=%d", tostring(eggId), player.UserId))
 				else
 					if not entry.Uid then
 						entry.Uid = DataService:GenerateUid()
@@ -1502,10 +1575,10 @@ function EggService:RestorePlayer(player)
 							if capsuleInfo then
 								local ok = self:CreatePlacedCapsuleFromData(player, capsuleInfo, entry, placedFolder, idleFloor)
 								if not ok then
-									table.insert(invalidPlaced, entry)
+									warn(string.format("[EggService] Restore placed capsule failed: userId=%d eggId=%s uid=%s", player.UserId, tostring(eggId), tostring(eggUid)))
 								end
 							else
-								table.insert(invalidPlaced, entry)
+								warn(string.format("[EggService] CapsuleConfig missing for placed eggId=%s userId=%d", tostring(eggId), player.UserId))
 							end
 						end
 					end
