@@ -44,10 +44,33 @@ if not requestProgressionDataEvent or not pushProgressionDataEvent then
 	return
 end
 
-local mainGui = GuiResolver.WaitForLayer(playerGui, { "MainGui", "MainGUI", "Main", "MainUI" }, {
-	"CoinNum",
-	"Progression",
-}, 30)
+local MAIN_GUI_NAMES = { "MainGui", "MainGUI", "Main", "MainUI" }
+local MAIN_GUI_DESC = { "CoinNum", "Progression" }
+local PROGRESSION_GUI_NAMES = { "Progression", "ProgressionGui", "ProgressionGUI" }
+local PROGRESSION_GUI_DESC = { "ProgressionBg", "CapsuleTemplate" }
+
+local mainGui = nil
+local progressionButton = nil
+local progressionButtonConn = nil
+local closeButtonConn = nil
+local mainRedPoint = nil
+
+local progressionGui = nil
+local progressionBg = nil
+local listFrame = nil
+local template = nil
+local closeButton = nil
+
+local function ensureMainGui(timeout)
+	if mainGui and mainGui.Parent then
+		return mainGui
+	end
+	local gui = GuiResolver.WaitForLayer(playerGui, MAIN_GUI_NAMES, MAIN_GUI_DESC, timeout or 0)
+	if gui then
+		mainGui = gui
+	end
+	return mainGui
+end
 
 local function resolveProgressionButton()
 	local root = mainGui or playerGui
@@ -71,54 +94,8 @@ local function resolveProgressionButton()
 	return nil
 end
 
-local progressionButton = resolveProgressionButton()
-if not progressionButton then
-	warn("[ProgressionDisplay] MainGui.Progression not found")
-end
-
-local progressionGui = GuiResolver.WaitForLayer(playerGui, { "Progression", "ProgressionGui", "ProgressionGUI" }, {
-	"ProgressionBg",
-	"CapsuleTemplate",
-}, 30)
-if not progressionGui then
-	warn("[ProgressionDisplay] Progression gui not found")
-	return
-end
-
-local progressionBg = progressionGui:WaitForChild("ProgressionBg", 10)
-if not progressionBg then
-	warn("[ProgressionDisplay] ProgressionBg not found")
-	return
-end
-
-local title = progressionBg:FindFirstChild("Title", true)
-local closeButton = title and title:FindFirstChild("CloseButton", true)
-if not closeButton then
-	warn("[ProgressionDisplay] CloseButton not found")
-end
-
-local listFrame = progressionBg:FindFirstChild("ScrollingFrame", true)
-if not listFrame then
-	warn("[ProgressionDisplay] ScrollingFrame not found")
-	return
-end
-
-local template = listFrame:FindFirstChild("CapsuleTemplate", true)
-if not template then
-	warn("[ProgressionDisplay] CapsuleTemplate not found")
-	return
-end
-
-template.Visible = false
-if progressionGui:IsA("LayerCollector") then
-	progressionGui.Enabled = true
-end
-progressionBg.Visible = false
-
-local mainRedPoint = nil
-if progressionButton then
-	mainRedPoint = progressionButton:FindFirstChild("RedPoint", true)
-end
+local pendingPayload = nil
+local pendingHasClaimable = nil
 
 local entriesById = {}
 local diamondIcon = nil
@@ -177,6 +154,7 @@ local function ensureDiamondButton(diamond)
 end
 
 local function updateMainRedPoint(visible)
+	pendingHasClaimable = visible
 	if mainRedPoint and mainRedPoint:IsA("GuiObject") then
 		mainRedPoint.Visible = visible == true
 	end
@@ -264,7 +242,25 @@ local function applyEntryVisual(entry, state)
 	end
 end
 
+local function clearEntries()
+	entriesById = {}
+	diamondIcon = nil
+	if not listFrame then
+		return
+	end
+	for _, child in ipairs(listFrame:GetChildren()) do
+		if child ~= template and child:GetAttribute("AchievementId") then
+			child:Destroy()
+		end
+	end
+end
+
 local function buildEntries()
+	if not listFrame or not template then
+		return
+	end
+	clearEntries()
+	template.Visible = false
 	local iconsToPreload = {}
 	local seenIcons = {}
 
@@ -354,26 +350,124 @@ local function buildEntries()
 	end
 end
 
-buildEntries()
-
-local function connectButton(button, callback)
-	if not button or not button:IsA("GuiButton") then
+local function applyPayload(payload)
+	if type(payload) ~= "table" then
 		return
 	end
-	button.Activated:Connect(callback)
+	local entries = payload.Entries
+	if type(entries) == "table" then
+		for _, state in ipairs(entries) do
+			local entry = entriesById[state.Id]
+			if entry then
+				applyEntryVisual(entry, state)
+			end
+		end
+	end
+	if payload.HasClaimable ~= nil then
+		updateMainRedPoint(payload.HasClaimable)
+	end
 end
 
-if progressionButton then
-	connectButton(progressionButton, function()
-		progressionBg.Visible = true
-	end)
+local function setupProgressionGui(gui)
+	if not gui or not gui.Parent then
+		return false
+	end
+	if gui == progressionGui and progressionBg and progressionBg.Parent then
+		return true
+	end
+	progressionGui = gui
+	progressionBg = gui:FindFirstChild("ProgressionBg", true)
+	if not progressionBg then
+		return false
+	end
+	listFrame = progressionBg:FindFirstChild("ScrollingFrame", true)
+	template = listFrame and listFrame:FindFirstChild("CapsuleTemplate", true)
+
+	local title = progressionBg:FindFirstChild("Title", true)
+	closeButton = title and title:FindFirstChild("CloseButton", true)
+
+	if progressionGui:IsA("LayerCollector") then
+		progressionGui.Enabled = true
+	end
+	progressionBg.Visible = false
+
+	if closeButtonConn then
+		closeButtonConn:Disconnect()
+		closeButtonConn = nil
+	end
+	if closeButton and closeButton:IsA("GuiButton") then
+		closeButtonConn = closeButton.Activated:Connect(function()
+			if progressionBg then
+				progressionBg.Visible = false
+			end
+		end)
+	end
+
+	buildEntries()
+	if pendingPayload then
+		applyPayload(pendingPayload)
+	end
+	return true
 end
 
-if closeButton and closeButton:IsA("GuiButton") then
-	connectButton(closeButton, function()
-		progressionBg.Visible = false
-	end)
+local function ensureProgressionGui(timeout)
+	if progressionGui and progressionGui.Parent and progressionBg and progressionBg.Parent then
+		return true
+	end
+	local gui = GuiResolver.WaitForLayer(playerGui, PROGRESSION_GUI_NAMES, PROGRESSION_GUI_DESC, timeout or 0)
+	if gui then
+		return setupProgressionGui(gui)
+	end
+	return false
 end
+
+local function bindProgressionButton(button)
+	if button == progressionButton and progressionButtonConn then
+		return
+	end
+	if progressionButtonConn then
+		progressionButtonConn:Disconnect()
+		progressionButtonConn = nil
+	end
+	progressionButton = button
+	mainRedPoint = nil
+	if progressionButton then
+		mainRedPoint = progressionButton:FindFirstChild("RedPoint", true)
+		if pendingHasClaimable ~= nil then
+			updateMainRedPoint(pendingHasClaimable)
+		end
+		progressionButtonConn = progressionButton.Activated:Connect(function()
+			if ensureProgressionGui(30) and progressionBg then
+				progressionBg.Visible = true
+			end
+		end)
+	end
+end
+
+local function refreshBindings()
+	if not mainGui or not mainGui.Parent then
+		mainGui = GuiResolver.FindLayer(playerGui, MAIN_GUI_NAMES, MAIN_GUI_DESC)
+	end
+	bindProgressionButton(resolveProgressionButton())
+	ensureProgressionGui(0)
+end
+
+task.spawn(function()
+	ensureMainGui(60)
+	bindProgressionButton(resolveProgressionButton())
+end)
+
+task.spawn(function()
+	ensureProgressionGui(60)
+end)
+
+playerGui.DescendantAdded:Connect(function(child)
+	local name = child.Name
+	if name == "Progression" or name == "ProgressionBg" or name == "ProgressionGui" or name == "ProgressionGUI"
+		or name == "MainGui" or name == "MainGUI" or name == "Main" or name == "MainUI" then
+		task.defer(refreshBindings)
+	end
+end)
 
 local claimTipsGui = GuiResolver.FindLayer(playerGui, { "ClaimTipsGui", "ClaimTipsGUI" }, {
 	"ClaimSuccessful",
@@ -498,22 +592,8 @@ local function playClaimTips(rewardCount)
 end
 
 pushProgressionDataEvent.OnClientEvent:Connect(function(payload)
-	if type(payload) ~= "table" then
-		return
-	end
-	local entries = payload.Entries
-	if type(entries) ~= "table" then
-		return
-	end
-	for _, state in ipairs(entries) do
-		local entry = entriesById[state.Id]
-		if entry then
-			applyEntryVisual(entry, state)
-		end
-	end
-	if payload.HasClaimable ~= nil then
-		updateMainRedPoint(payload.HasClaimable)
-	end
+	pendingPayload = payload
+	applyPayload(payload)
 end)
 
 if pushProgressionClaimedEvent then

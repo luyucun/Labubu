@@ -1821,3 +1821,24 @@ Id	名字	加成数值	生效时间（分钟）	钻石价格	开发者商品
 77005	14	7	10	1	1	Max Placeable Blind Boxes +1	Collect all figurines in the Flame Blind Box	rbxassetid://115686630835615
 77006	15	7	10	1	1	Max Placeable Blind Boxes +1	Collect all figurines in the Heart Blind Box	rbxassetid://95301400310853
 77007	16	5	10	1	1	Max Placeable Blind Boxes +1	Collect all figurines in the Celestial Blind Box	rbxassetid://108680777302678
+
+
+策划文档V5.7  群组奖励
+
+概述：玩家加入我们游戏的群组，可以领一份奖励
+
+详细规则是：
+
+1.玩家点击StarterGui - TopRightGui - GroupReward - Button这个按钮，打开奖励领取界面（把StarterGui - GroupReward - Bg的visible属性改成true）
+2.玩家点击StarterGui - GroupReward - Bg - Title - CloseButton按钮，关闭界面
+3.玩家点击StarterGui - GroupReward - Bg - Claim这个按钮，触发领取验证，如果验证成功，则为玩家发放奖励，需要弹出系统飘字提示：Claim Successful!（这个参考在线奖励的领取成功飘字提示），同时领取成功后把Claim这个按钮的Visible属性改成false，然后把StarterGui - GroupReward - Bg - Claimed这个textlabel的visible属性改成True
+4.玩家领取成功后，需要把StarterGui - TopRightGui - GroupReward这个按钮的Visible属性改成False，永久改成False不再出现了。
+5.玩家如果点击领取时，不满足领取条件，则无法领取，飘字提示：Join the group for rewards!，然后需要播放一下我们系统的警告音，和购买时库存不足的音效一致
+
+我们的奖励领取条件是：
+1.玩家一定要加入我们游戏的群组，这个应该在roblox有提供的官方验证接口，直接用这个接口判断玩家是否加入了群组
+2.玩家在点击领取奖励的那一刻在群组中，即可领取成功
+
+奖励内容是为玩家发放5个1003这个id的盲盒
+
+至于我们的群组id，是602157319

@@ -40,9 +40,13 @@ local UI_TEMPLATES = {
 	"InfoPart",
 }
 
+-- 性能优化开关
+local ENABLE_DEEP_CONFIG_SCAN = false
+local MODEL_PRELOAD_BLOCKING_LIMIT = 120
+
 -- 超时配置
 local CONFIG_WAIT_TIMEOUT = 30
-local DATA_WAIT_TIMEOUT = 60
+local DATA_WAIT_TIMEOUT = 90
 local CHARACTER_WAIT_TIMEOUT = 60
 
 -- 进度分配
@@ -208,6 +212,34 @@ local function createGuiBlocker(rootGui)
 	}
 end
 
+local function ensureTopRightVisible()
+	local names = { "TopRightGui", "TopRightGUI", "TopRight", "TopRightUI" }
+	local topRight = nil
+	for _, name in ipairs(names) do
+		local gui = playerGui:FindFirstChild(name)
+		if gui and gui:IsA("LayerCollector") then
+			topRight = gui
+			break
+		end
+	end
+	if not topRight then
+		for _, name in ipairs(names) do
+			local desc = playerGui:FindFirstChild(name, true)
+			if desc and desc:IsA("LayerCollector") then
+				topRight = desc
+				break
+			end
+		end
+	end
+	if topRight and topRight:IsA("LayerCollector") then
+		topRight.Enabled = true
+		local bg = topRight:FindFirstChild("Bg", true)
+		if bg and bg:IsA("GuiObject") then
+			bg.Visible = true
+		end
+	end
+end
+
 --------------------------------------------------------------------------------
 -- 资源收集
 --------------------------------------------------------------------------------
@@ -298,9 +330,11 @@ local function collectConfigAssets()
 
 	for _, module in ipairs(configFolder:GetChildren()) do
 		if module:IsA("ModuleScript") then
-			local ok, result = pcall(require, module)
-			if ok and result then
-				scanTable(result)
+			if ENABLE_DEEP_CONFIG_SCAN then
+				local ok, result = pcall(require, module)
+				if ok and result then
+					scanTable(result)
+				end
 			end
 		end
 	end
@@ -395,6 +429,31 @@ local function collectModelInstances()
 	return instances
 end
 
+local function collectPriorityModelInstances()
+	local instances = {}
+	local seen = {}
+
+	local function addInstance(instance)
+		if not instance or seen[instance] then
+			return
+		end
+		seen[instance] = true
+		table.insert(instances, instance)
+	end
+
+	for _, templateName in ipairs(UI_TEMPLATES) do
+		local template = ReplicatedStorage:FindFirstChild(templateName)
+		if template then
+			addInstance(template)
+			for _, descendant in ipairs(template:GetDescendants()) do
+				addInstance(descendant)
+			end
+		end
+	end
+
+	return instances
+end
+
 --------------------------------------------------------------------------------
 -- 预加载执行
 --------------------------------------------------------------------------------
@@ -465,6 +524,21 @@ local function waitForPlayerData(timeout)
 	return false
 end
 
+local function startPlayerDataWait(timeout)
+	local done = false
+	local result = false
+	task.spawn(function()
+		result = waitForPlayerData(timeout)
+		done = true
+	end)
+	return function()
+		while not done do
+			task.wait(0.1)
+		end
+		return result
+	end
+end
+
 local function waitForCharacter(timeout)
 	local startTime = os.clock()
 	while os.clock() - startTime < timeout do
@@ -529,11 +603,13 @@ local function main()
 	end
 	task.wait()
 
+	local waitForDataDone = startPlayerDataWait(DATA_WAIT_TIMEOUT)
+
 	-- 阶段1: 收集并预加载图片资源 (0% - 40%)
 	local imageAssets = collectConfigAssets()
 
 	-- 从UI容器收集额外图片
-	local uiContainers = { StarterGui, playerGui }
+	local uiContainers = { StarterGui }
 	for _, templateName in ipairs(UI_TEMPLATES) do
 		local template = ReplicatedStorage:FindFirstChild(templateName)
 		if template then
@@ -563,13 +639,24 @@ local function main()
 		waitForChildSafe(ReplicatedStorage, folderName, 10)
 	end
 
-	local modelInstances = collectModelInstances()
-	preloadBatch(modelInstances, setLoadingProgress, PROGRESS_MODEL_START, PROGRESS_MODEL_END)
+	local priorityModels = collectPriorityModelInstances()
+	preloadBatch(priorityModels, setLoadingProgress, PROGRESS_MODEL_START, PROGRESS_MODEL_END)
+
+	task.spawn(function()
+		local allModels = collectModelInstances()
+		if #allModels > MODEL_PRELOAD_BLOCKING_LIMIT then
+			preloadBatch(allModels, nil, 0, 1)
+		end
+	end)
 
 	-- 阶段3: 等待玩家数据 (70% - 90%)
 	setLoadingProgress(PROGRESS_DATA_START)
 
-	waitForPlayerData(DATA_WAIT_TIMEOUT)
+	if waitForDataDone then
+		waitForDataDone()
+	else
+		waitForPlayerData(DATA_WAIT_TIMEOUT)
+	end
 	setLoadingProgress(PROGRESS_DATA_END)
 
 	-- 阶段4: 等待角色就绪 (90% - 100%)
@@ -595,6 +682,7 @@ local function main()
 	if guiBlocker then
 		guiBlocker.Restore()
 	end
+	ensureTopRightVisible()
 end
 
 -- 执行主流程

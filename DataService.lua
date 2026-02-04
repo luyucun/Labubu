@@ -67,6 +67,7 @@ local function defaultData()
 		LastLogoutTime = 0,
 		GuideStep = 1,
 		StarterPackPurchased = false,
+		GroupRewardClaimed = false,
 	}
 end
 
@@ -238,6 +239,10 @@ local function normalizeStarterPackPurchased(value)
 	return value == true
 end
 
+local function normalizeGroupRewardClaimed(value)
+	return value == true
+end
+
 local function normalizeGuideStep(value)
 	local num = tonumber(value)
 	if not num then
@@ -394,11 +399,23 @@ local function calculateFigurineRate(figurineInfo, state)
 	local quality = tonumber(figurineInfo.Quality) or 1
 	local qualityCoeff = FigurineRateConfig.GetQualityCoeff(quality)
 	local rarityCoeff = FigurineRateConfig.GetRarityCoeff(rarity)
-	local levelFactor = 1 + (level - 1) * qualityCoeff
-	if levelFactor < 0 then
-		levelFactor = 0
+	local baseValue = baseRate * rarityCoeff
+	if baseValue <= 0 then
+		return 0
 	end
-	return baseRate * rarityCoeff * levelFactor
+	if level <= 1 then
+		return baseValue
+	end
+	local perLevel = baseValue * qualityCoeff
+	if perLevel > 0 and perLevel < 1 then
+		perLevel = 1
+	end
+	local upgradeDelta = perLevel * (level - 1)
+	local rate = baseValue + upgradeDelta
+	if rate < 0 then
+		rate = 0
+	end
+	return rate
 end
 
 local function normalizeCapsuleOpenById(stats)
@@ -598,6 +615,7 @@ local function applyStatsAttributes(player, data)
 	player:SetAttribute("Diamonds", normalizeDiamonds(data.Diamonds))
 	player:SetAttribute("GuideStep", normalizeGuideStep(data.GuideStep))
 	player:SetAttribute("StarterPackPurchased", normalizeStarterPackPurchased(data.StarterPackPurchased))
+	player:SetAttribute("GroupRewardClaimed", normalizeGroupRewardClaimed(data.GroupRewardClaimed))
 end
 
 local function ensureFigurineOwnedFolder(player)
@@ -825,6 +843,17 @@ function DataService:LoadPlayer(player)
 		end
 	end
 
+	if data.GroupRewardClaimed == nil then
+		data.GroupRewardClaimed = false
+		needsSave = true
+	else
+		local normalizedGroupReward = normalizeGroupRewardClaimed(data.GroupRewardClaimed)
+		if data.GroupRewardClaimed ~= normalizedGroupReward then
+			data.GroupRewardClaimed = normalizedGroupReward
+			needsSave = true
+		end
+	end
+
 
 	local normalizedPlaytime = normalizeCount(data.TotalPlayTime)
 	if data.TotalPlayTime ~= normalizedPlaytime then
@@ -868,6 +897,9 @@ function DataService:LoadPlayer(player)
 		PlaytimeLoop = false,
 		DataVersion = 1,
 	}
+
+	self:RefreshAllFigurineStates(player)
+	self:RecalculateOutputSpeed(player)
 
 	applyCoinsAttribute(player, data.Coins)
 	applyStatsAttributes(player, data)
@@ -931,6 +963,27 @@ function DataService:SetStarterPackPurchased(player, purchased)
 	record.Dirty = true
 	if player and player.Parent then
 		player:SetAttribute("StarterPackPurchased", normalized)
+	end
+end
+
+function DataService:HasGroupRewardClaimed(player)
+	local record = sessionData[player.UserId]
+	return record and record.Data.GroupRewardClaimed == true
+end
+
+function DataService:SetGroupRewardClaimed(player, claimed)
+	local record = sessionData[player.UserId]
+	if not record then
+		return
+	end
+	local normalized = normalizeGroupRewardClaimed(claimed)
+	if record.Data.GroupRewardClaimed == normalized then
+		return
+	end
+	record.Data.GroupRewardClaimed = normalized
+	record.Dirty = true
+	if player and player.Parent then
+		player:SetAttribute("GroupRewardClaimed", normalized)
 	end
 end
 
@@ -1464,6 +1517,26 @@ function DataService:EnsureFigurineState(player, figurineId)
 		record.Dirty = true
 	end
 	return state
+end
+
+function DataService:RefreshAllFigurineStates(player)
+	local record = sessionData[player.UserId]
+	if not record then
+		return 0
+	end
+	local figurines = record.Data.Figurines
+	if type(figurines) ~= "table" then
+		return 0
+	end
+	local count = 0
+	for figurineId, owned in pairs(figurines) do
+		if owned then
+			if self:EnsureFigurineState(player, figurineId) then
+				count += 1
+			end
+		end
+	end
+	return count
 end
 
 function DataService:SetFigurineLastCollectTime(player, figurineId, timestamp)

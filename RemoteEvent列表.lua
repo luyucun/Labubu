@@ -20,6 +20,7 @@ ReplicatedStorage
         ├── RequestStarterPackPurchase（RemoteEvent）
         ├── PushStarterPackState（RemoteEvent）
         ├── PushStarterPackReward（RemoteEvent）
+        ├── RequestGroupReward（RemoteEvent）
         ├── PushGuideState（RemoteEvent）
         ├── BuyConveyorEgg（RemoteEvent）
         ├── PushConveyorEggSpawn（RemoteEvent）
@@ -119,7 +120,7 @@ ReplicatedStorage
 
 17. PlaySfx (S->C)
 - 参数: Kind
-- 说明: 服务端通知客户端播放音效（Collect/Unlock）
+- 说明: 服务端通知客户端播放音效（Collect/Unlock/Warning）
 
 18. RequestGlobalLeaderboard (C->S)
 - 参数: 无
@@ -187,11 +188,15 @@ ReplicatedStorage
 - 参数: Rewards[{Id, Count}]
 - 说明: 服务端推送新手礼包奖励展示
 
-33. PushConveyorEggSpawn (S->C)
+33. RequestGroupReward (C->S)
+- 参数: 无
+- 说明: 客户端请求领取群组奖励
+
+34. PushConveyorEggSpawn (S->C)
 - 参数: Payload={Uid, CapsuleId, Rarity, Quality, Price, OpenSeconds, MoveTime}
 - 说明: 服务端推送本次传送带盲盒生成数据，客户端本地创建与移动表现
 
-34. PushConveyorEggRemove (S->C)
+35. PushConveyorEggRemove (S->C)
 - 参数: Uid
 - 说明: 服务端通知客户端移除传送带盲盒（过期/被购买）
 

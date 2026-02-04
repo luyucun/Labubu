@@ -1,7 +1,7 @@
 ﻿--[[
 游戏架构设计文档
 版本: V5.0
-最后更新: 2026-02-01
+最后更新: 2026-02-04
 ]]
 游戏架构设计 V5.0
 
@@ -55,6 +55,7 @@ ServerScriptService/
 - Server/PotionService: 药水购买/使用/倒计时同步与产速加成
 - Server/GuideService: 新手引导流程控制/Beam指引/提示同步
 - Server/StarterPackService: 新手礼包通行证购买/奖励发放
+- Server/GroupRewardService: 群组奖励领取/奖励发放
 - Server/LeaderboardService: 服务器内排行榜（总产速/总游戏时间）
 - Server/FriendBonusService: 同服好友加成统计与属性同步
 - Server/GlobalLeaderboardService: 全局排行榜数据维护与刷新推送
@@ -73,6 +74,7 @@ StarterPlayer/StarterPlayerScripts/
 - UI/PotionsDisplay: 药水界面显示/倒计时/购买与使用
 - UI/GuideDisplay: 新手引导提示/手指动效
 - UI/StarterPackDisplay: 新手礼包界面/购买/领取弹框/价格渐变
+- UI/GroupRewardDisplay: 群组奖励界面显示/领取
 - UI/TestInfoDisplay: 统计测试UI显示
 - UI/ErrorHint: 统一错误提示显示
 - UI/GachaResult: 抽卡结果表现与升级进度动画
@@ -136,6 +138,7 @@ PlayerData
 - LastLogoutTime: unix
 - GuideStep: number
 - StarterPackPurchased: boolean
+- GroupRewardClaimed: boolean
 
 说明
 - PendingCoins 为未收取累计，LastCollectTime 用于结算增量，在线/离线共用避免双算
@@ -158,6 +161,7 @@ PlayerData
 - Diamonds: number
 - GuideStep: number
 - StarterPackPurchased: boolean
+- GroupRewardClaimed: boolean
 
 4. 核心系统职责
 - DataService：会话缓存 + Dirty 标记 + 间隔保存 + BindToClose 兜底，UpdateAsync 持久化，离线结算，统计(在线时长/盲盒开启/总产出速度)，手办升级数据管理
@@ -178,6 +182,7 @@ PlayerData
 - 玩家进入：随机分配空闲 Home 槽位 -> 绑定 SpawnLocation -> 读取数据(默认 Coins=GameConfig.StartCoins)
 - 新手引导：购买任意盲盒 -> 引导至IdleFloor -> 点击背包放置 -> 开盒 -> 退出镜头后触碰领取金币
 - 新手礼包：购买通行证 -> 发放指定盲盒奖励 -> 弹出领取提示并隐藏入口
+- 群组奖励：右上角按钮打开 -> 服务端校验是否加入群组 -> 发放5个1003盲盒 -> 标记GroupRewardClaimed
 - V1.3 流程：传送带按刷新池权重生成盲盒 -> 玩家交互购买 -> 盲盒进背包 -> 放置地面 -> 倒计时结束
 - 传送带产蛋：每个Home独立计时 -> 按OutputSpeed解锁刷新池 -> 权重抽基础品质 -> 稀有度突变确定稀有度 -> 用品质+稀有度映射 CapsuleId -> 生成在途盲盒Uid并推送客户端 -> 客户端本地移动表现 -> 到期/购买由服务端通知客户端移除
 - 购买蛋：客户端点击 -> 服务端校验(归属/距离/金币/冷却) -> 扣费 -> 入背包 -> 移除蛋
@@ -196,8 +201,10 @@ PlayerData
 - 版本不同步：客户端检测版本缺口 -> RequestResync -> 服务端下发全量快照
 
 6. 产币计算与限制（可调）
- - rate = baseRate * RarityCoeff * (1 + (Level - 1) * QualityCoeff) * (1 + ProgressionBonus + PurchaseBonusAdd + PotionBonus1 + PotionBonus2 + PotionBonus3) * (1 + 0.1 * FriendCount)
- - PurchaseBonusAdd = OutputMultiplier - 1
+- baseValue = baseRate * RarityCoeff
+- perLevel = baseValue * QualityCoeff，若 0 < perLevel < 1 则每级按 1 计算
+- rate = (baseValue + perLevel * (Level - 1)) * (1 + ProgressionBonus + PurchaseBonusAdd + PotionBonus1 + PotionBonus2 + PotionBonus3) * (1 + 0.1 * FriendCount)
+- PurchaseBonusAdd = OutputMultiplier - 1
  - OfflineCapSeconds = GameConfig.OfflineCapSeconds + 养成离线上限加成分钟*60
 - FigurineCoinCapSeconds 控制单个手办未领取累计上限时长
 - 在线收取：按 now - LastCollectTime 结算，不受离线封顶
@@ -271,4 +278,3 @@ PlayerData
 关键属性：
 - player.DataReady: 服务端数据加载完成标记（服务端设置）
 - player.AssetsPreloaded: 客户端资源预加载完成标记（客户端设置）
-

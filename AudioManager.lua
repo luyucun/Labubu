@@ -14,6 +14,7 @@ local BGM_ID = "rbxassetid://85493154394720"
 local SFX_IDS = {
 	Collect = "rbxassetid://307631257",
 	Unlock = "rbxassetid://3072176098",
+	Warning = "rbxassetid://3072176098",
 }
 
 local state = {

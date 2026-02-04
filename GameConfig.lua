@@ -24,6 +24,9 @@ local GameConfig = {
 	ClaimAllTenProductId = 3514031237,
 	AutoCollectPassId = 1673138854,
 	StarterPackPassId = 1693176659,
+	GroupRewardGroupId = 602157319,
+	GroupRewardCapsuleId = 1003,
+	GroupRewardCapsuleCount = 5,
 	CoinAddMinOutputSpeed = 20,
 	CoinAddProducts = {
 		{

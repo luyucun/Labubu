@@ -23,6 +23,7 @@ local FriendBonusService = require(script.Parent:WaitForChild("FriendBonusServic
 local GlobalLeaderboardService = require(script.Parent:WaitForChild("GlobalLeaderboardService"))
 local GuideService = require(script.Parent:WaitForChild("GuideService"))
 local StarterPackService = require(script.Parent:WaitForChild("StarterPackService"))
+local GroupRewardService = require(script.Parent:WaitForChild("GroupRewardService"))
 
 --------------------------------------------------------------------------------
 -- RemoteEvent管理
@@ -82,6 +83,7 @@ FriendBonusService:Init()
 GlobalLeaderboardService:Init()
 GuideService:Init()
 StarterPackService:Init()
+GroupRewardService:Init()
 
 --------------------------------------------------------------------------------
 -- 关服保存
@@ -130,6 +132,24 @@ local function handlePlayerAdded(player)
 		return
 	end
 
+	-- 标记数据已就绪（客户端AssetPreload会等待该标记）
+	player:SetAttribute("DataReady", true)
+
+	-- 推送初始数据给客户端
+	if pushInitDataEvent then
+		local snapshot = DataService:GetSnapshot(player)
+		if snapshot then
+			pushInitDataEvent:FireClient(player, snapshot, os.time(), DataService:GetVersion(player))
+		end
+	end
+
+	-- 先异步加载角色，避免阻塞加载进度
+	task.spawn(function()
+		if player and player.Parent then
+			player:LoadCharacterAsync()
+		end
+	end)
+
 	-- 绑定各服务
 	ProgressionService:BindPlayer(player)
 	PotionService:BindPlayer(player)
@@ -137,6 +157,7 @@ local function handlePlayerAdded(player)
 	GlobalLeaderboardService:BindPlayer(player)
 	GuideService:BindPlayer(player)
 	StarterPackService:BindPlayer(player)
+	GroupRewardService:BindPlayer(player)
 
 	EggService:BindPlayer(player)
 
@@ -153,20 +174,6 @@ local function handlePlayerAdded(player)
 	if not success then
 		warn(string.format("[Bootstrap] ConveyorService:StartForPlayer ERROR: %s", tostring(err)))
 	end
-
-	-- 标记数据已就绪（客户端AssetPreload会等待这个标记）
-	player:SetAttribute("DataReady", true)
-
-	-- 推送初始数据给客户端
-	if pushInitDataEvent then
-		local snapshot = DataService:GetSnapshot(player)
-		if snapshot then
-			pushInitDataEvent:FireClient(player, snapshot, os.time(), DataService:GetVersion(player))
-		end
-	end
-
-	-- 加载角色
-	player:LoadCharacterAsync()
 end
 
 --------------------------------------------------------------------------------
@@ -183,6 +190,7 @@ local function handlePlayerRemoving(player)
 	PotionService:UnbindPlayer(player)
 	GuideService:UnbindPlayer(player)
 	StarterPackService:UnbindPlayer(player)
+	GroupRewardService:UnbindPlayer(player)
 	FriendBonusService:HandlePlayerRemoving(player)
 	DataService:UnloadPlayer(player, true)
 	HomeService:ReleaseHome(player)
