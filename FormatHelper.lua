@@ -1,4 +1,4 @@
---[[
+﻿--[[
 脚本名称: FormatHelper
 脚本类型: ModuleScript (共享模块)
 脚本位置: ReplicatedStorage/Modules/FormatHelper
@@ -15,7 +15,7 @@
 
 local FormatHelper = {}
 
-local BASIC_SUFFIXES = { "K", "M", "B", "T" }
+local BASIC_SUFFIXES = { "k", "M", "B", "T" }
 
 local function toAlphabetSuffix(index)
 	local length = 2
@@ -67,7 +67,9 @@ local function formatShortNumber(amount, minCompact)
 	end
 
 	local result = string.format("%." .. decimals .. "f%s", shortened, suffix)
-	result = result:gsub("%.?0+([A-Z]+)$", "%1")
+	if decimals > 0 then
+		result = result:gsub("%.?0+([%a]+)$", "%1")
+	end
 	return result
 end
 
@@ -241,3 +243,4 @@ function FormatHelper.FormatPercent(value, decimals)
 end
 
 return FormatHelper
+

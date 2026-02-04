@@ -502,6 +502,22 @@ local function getCapsuleInfoHeight(model, part)
 	return 0
 end
 
+local function findPriceLabel(billboard)
+	if not billboard then
+		return nil
+	end
+	local label = billboard:FindFirstChild("Price", true)
+	if label and (label:IsA("TextLabel") or label:IsA("TextButton")) then
+		return label
+	end
+	for _, obj in ipairs(billboard:GetDescendants()) do
+		if (obj:IsA("TextLabel") or obj:IsA("TextButton")) and string.find(obj.Name, "Price") then
+			return obj
+		end
+	end
+	return nil
+end
+
 local function applyCapsuleInfoBillboard(model, capsuleInfo)
 	if not model then
 		return
@@ -555,8 +571,8 @@ local function applyCapsuleInfoBillboard(model, capsuleInfo)
 		end
 	end
 
-	local priceLabel = billboard:FindFirstChild("Price", true)
-	if priceLabel and priceLabel:IsA("TextLabel") then
+	local priceLabel = findPriceLabel(billboard)
+	if priceLabel then
 		local price = tonumber(info and info.Price) or tonumber(model:GetAttribute("Price")) or 0
 		priceLabel.Text = FormatHelper.FormatCoinsShort(price, true)
 	end

@@ -70,9 +70,24 @@ local function resolveTopButton(root)
 	return nil, nil
 end
 
-local topButton, topGroupRoot = topRightGui and resolveTopButton(topRightGui) or nil
-if not topButton then
-	topButton = GuiResolver.FindGuiButton(playerGui, "GroupReward")
+local topButton = nil
+local topGroupRoot = nil
+local topButtonConn = nil
+
+local function refreshTopButton()
+	if not topRightGui then
+		return
+	end
+	local button, root = resolveTopButton(topRightGui)
+	if not button then
+		button = GuiResolver.FindGuiButton(playerGui, "GroupReward")
+	end
+	if button then
+		topButton = button
+	end
+	if root then
+		topGroupRoot = root
+	end
 end
 
 local groupRewardGui = GuiResolver.WaitForLayer(playerGui, { "GroupReward" }, {
@@ -136,8 +151,11 @@ local function connectButton(button, callback)
 	button.Activated:Connect(callback)
 end
 
-if topButton then
-	connectButton(topButton, function()
+local function bindTopButton()
+	if not topButton or topButtonConn then
+		return
+	end
+	topButtonConn = topButton.Activated:Connect(function()
 		if claimed then
 			return
 		end
@@ -173,3 +191,17 @@ player:GetAttributeChangedSignal("GroupRewardClaimed"):Connect(function()
 end)
 
 applyClaimedState()
+
+refreshTopButton()
+bindTopButton()
+applyClaimedState()
+
+if topRightGui then
+	topRightGui.DescendantAdded:Connect(function()
+		if not topButton then
+			refreshTopButton()
+			bindTopButton()
+			applyClaimedState()
+		end
+	end)
+end

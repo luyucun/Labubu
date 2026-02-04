@@ -17,6 +17,7 @@ local CapsuleSpawnPoolConfig = require(ReplicatedStorage:WaitForChild("Config"):
 
 local EggService = require(script.Parent:WaitForChild("EggService"))
 local ProgressionService = require(script.Parent:WaitForChild("ProgressionService"))
+local DataService = require(script.Parent:WaitForChild("DataService"))
 
 local function getServerTimeNow()
 	local ok, value = pcall(function()
@@ -50,6 +51,7 @@ local rng = Random.new()
 local running = {} -- [userId] = {Active = bool, Capsules = { [uid] = record }}
 local purchaseCooldowns = {}
 local PURCHASE_COOLDOWN = 0.4
+local PURCHASE_GRACE = math.max(0, tonumber(GameConfig.ConveyorPurchaseGraceSeconds) or 0)
 
 local function ensureLabubuEvents()
 	local eventsFolder = ReplicatedStorage:FindFirstChild("Events")
@@ -85,6 +87,14 @@ end
 local pushConveyorSpawnEvent = ensureRemoteEvent("PushConveyorEggSpawn")
 local pushConveyorRemoveEvent = ensureRemoteEvent("PushConveyorEggRemove")
 local buyConveyorEggEvent = ensureRemoteEvent("BuyConveyorEgg")
+local errorHintEvent = ensureRemoteEvent("ErrorHint")
+
+local function sendErrorHint(player, code, message)
+	if not errorHintEvent or not player or not player.Parent then
+		return
+	end
+	errorHintEvent:FireClient(player, code, message)
+end
 
 local function getCapsuleFolder(conveyorFolder)
 	local folder = conveyorFolder:FindFirstChild("Capsules")
@@ -361,6 +371,7 @@ if buyConveyorEggEvent then
 		if record.ExpireAt and now > record.ExpireAt then
 			state.Capsules[uid] = nil
 			pushRemove(player, uid)
+			sendErrorHint(player, "CapsuleExpired", "Capsule expired.")
 			return
 		end
 		local capsuleInfo = getCapsuleInfo(record.CapsuleId)
@@ -369,11 +380,19 @@ if buyConveyorEggEvent then
 			pushRemove(player, uid)
 			return
 		end
-		local ok = EggService:PurchaseCapsule(player, capsuleInfo)
-		if ok then
-			state.Capsules[uid] = nil
-			pushRemove(player, uid)
+		local price = tonumber(capsuleInfo.Price) or 0
+		local coins = DataService:GetCoins(player)
+		if coins < price then
+			sendErrorHint(player, "NotEnoughCoins", "Not enough coins.")
+			return
 		end
+		local ok = EggService:PurchaseCapsule(player, capsuleInfo)
+		if not ok then
+			sendErrorHint(player, "PurchaseFailed", "Purchase failed.")
+			return
+		end
+		state.Capsules[uid] = nil
+		pushRemove(player, uid)
 	end)
 end
 
@@ -420,19 +439,22 @@ function ConveyorService:StartForPlayer(player, homeSlot)
 			end
 			if capsuleInfo then
 				local moveTime = tonumber(GameConfig.ConveyorMoveTime) or 0
+				local grace = PURCHASE_GRACE
 				local uid = HttpService:GenerateGUID(false)
 				local now = getServerTimeNow()
+				local expireAt = now + math.max(0, moveTime) + grace
 				local record = {
 					Uid = uid,
 					CapsuleId = capsuleInfo.Id,
 					OwnerUserId = player.UserId,
 					SpawnTime = now,
-					ExpireAt = now + math.max(0, moveTime),
+					ExpireAt = expireAt,
 				}
 				state.Capsules[uid] = record
 				pushSpawn(player, record, capsuleInfo, moveTime)
-				if moveTime > 0 then
-					task.delay(moveTime, function()
+				local removeDelay = math.max(0, moveTime + grace)
+				if removeDelay > 0 then
+					task.delay(removeDelay, function()
 						if not state.Active then
 							return
 						end

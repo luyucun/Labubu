@@ -16,6 +16,7 @@ local GameConfig = {
 	HomeSlotCount = 8,
 	ConveyorSpawnInterval = 2.4,
 	ConveyorMoveTime = 15,
+	ConveyorPurchaseGraceSeconds = 2,
 	CapsuleSpawnPoolId = 1,
 	FigurineCoinCapSeconds = 10800,
 	OfflineCapSeconds = 7200,
