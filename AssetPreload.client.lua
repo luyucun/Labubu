@@ -2,8 +2,8 @@
 脚本名称: AssetPreload
 脚本类型: LocalScript
 脚本位置: ReplicatedFirst/AssetPreload
-版本: V2.0
-职责: 统一预加载流程 - 图片资源/模型/玩家数据全部就绪后才进入游戏
+版本: V2.1
+职责: 快速首屏加载 - 仅阻塞关键图片与玩家数据，其余资源后台预加载
 ]]
 
 local ContentProvider = game:GetService("ContentProvider")
@@ -25,12 +25,18 @@ local LOADING_IMAGES = {
 	"rbxassetid://91249044330188",
 }
 
--- 需要预加载的模型文件夹
-local MODEL_FOLDERS = {
+
+-- 需要后台预加载的模型文件夹（首屏不阻塞）
+local BACKGROUND_MODEL_FOLDERS = {
 	"LBB",
-	"Capsule",
 	"Effect",
 	"GuideEffect",
+}
+
+-- 首屏仅预加载 Leaf/Water（品质1/2）手办图标
+local EARLY_FIGURINE_QUALITIES = {
+	[1] = true, -- Leaf 品质
+	[2] = true, -- Water 品质
 }
 
 -- 需要预加载的UI模板
@@ -40,10 +46,6 @@ local UI_TEMPLATES = {
 	"InfoPart",
 }
 
--- 性能优化开关
-local ENABLE_DEEP_CONFIG_SCAN = false
-local MODEL_PRELOAD_BLOCKING_LIMIT = 120
-
 -- 超时配置
 local CONFIG_WAIT_TIMEOUT = 30
 local DATA_WAIT_TIMEOUT = 90
@@ -51,12 +53,10 @@ local CHARACTER_WAIT_TIMEOUT = 60
 
 -- 进度分配
 local PROGRESS_IMAGE_START = 0
-local PROGRESS_IMAGE_END = 0.4
-local PROGRESS_MODEL_START = 0.4
-local PROGRESS_MODEL_END = 0.7
-local PROGRESS_DATA_START = 0.7
-local PROGRESS_DATA_END = 0.9
-local PROGRESS_CHARACTER_START = 0.9
+local PROGRESS_IMAGE_END = 0.15
+local PROGRESS_DATA_START = 0.15
+local PROGRESS_DATA_END = 0.85
+local PROGRESS_CHARACTER_START = 0.85
 local PROGRESS_CHARACTER_END = 1.0
 
 --------------------------------------------------------------------------------
@@ -243,20 +243,33 @@ end
 --------------------------------------------------------------------------------
 -- 资源收集
 --------------------------------------------------------------------------------
-local function collectConfigAssets()
+local function addUniqueAsset(assets, seen, assetId)
+	if type(assetId) == "string" and assetId ~= "" and isAssetId(assetId) and not seen[assetId] then
+		seen[assetId] = true
+		table.insert(assets, assetId)
+	end
+end
+
+local function mergeAssets(baseAssets, extraAssets)
+	local merged = {}
+	local seen = {}
+	for _, assetId in ipairs(baseAssets or {}) do
+		addUniqueAsset(merged, seen, assetId)
+	end
+	for _, assetId in ipairs(extraAssets or {}) do
+		addUniqueAsset(merged, seen, assetId)
+	end
+	return merged
+end
+
+
+-- 首屏阻塞预加载：Loading图 + Leaf/Water手办图标
+local function collectBlockingImageAssets()
 	local assets = {}
 	local seen = {}
 
-	local function addAsset(assetId)
-		if type(assetId) == "string" and assetId ~= "" and isAssetId(assetId) and not seen[assetId] then
-			seen[assetId] = true
-			table.insert(assets, assetId)
-		end
-	end
-
-	-- Loading图片
 	for _, img in ipairs(LOADING_IMAGES) do
-		addAsset(img)
+		addUniqueAsset(assets, seen, img)
 	end
 
 	local configFolder = waitForChildSafe(ReplicatedStorage, "Config", CONFIG_WAIT_TIMEOUT)
@@ -265,76 +278,74 @@ local function collectConfigAssets()
 		return assets
 	end
 
-	-- CapsuleConfig - 盲盒图标和展示图
-	local capsuleConfig = configFolder:FindFirstChild("CapsuleConfig")
-	if capsuleConfig then
-		local ok, config = pcall(require, capsuleConfig)
-		if ok and config and config.Capsules then
-			for _, capsule in ipairs(config.Capsules) do
-				addAsset(capsule.Icon)
-				addAsset(capsule.DisplayImage)
-			end
-		end
-	end
-
-	-- FigurineConfig - 手办图标
 	local figurineConfig = configFolder:FindFirstChild("FigurineConfig")
 	if figurineConfig then
 		local ok, config = pcall(require, figurineConfig)
 		if ok and config and config.Figurines then
 			for _, figurine in ipairs(config.Figurines) do
-				addAsset(figurine.Icon)
+				local quality = tonumber(figurine.Quality) or 0
+				if EARLY_FIGURINE_QUALITIES[quality] then
+					addUniqueAsset(assets, seen, figurine.Icon)
+				end
 			end
 		end
 	end
 
-	-- QualityConfig - 品质图标
+	return assets
+end
+
+
+-- 后台预加载：其余配置图片资源
+local function collectDeferredConfigAssets()
+	local assets = {}
+	local seen = {}
+
+	local configFolder = waitForChildSafe(ReplicatedStorage, "Config", CONFIG_WAIT_TIMEOUT)
+	if not configFolder then
+		warn("[AssetPreload] Config folder not found")
+		return assets
+	end
+
+	local capsuleConfig = configFolder:FindFirstChild("CapsuleConfig")
+	if capsuleConfig then
+		local ok, config = pcall(require, capsuleConfig)
+		if ok and config and config.Capsules then
+			for _, capsule in ipairs(config.Capsules) do
+				addUniqueAsset(assets, seen, capsule.Icon)
+				addUniqueAsset(assets, seen, capsule.DisplayImage)
+			end
+		end
+	end
+
+	local figurineConfig = configFolder:FindFirstChild("FigurineConfig")
+	if figurineConfig then
+		local ok, config = pcall(require, figurineConfig)
+		if ok and config and config.Figurines then
+			for _, figurine in ipairs(config.Figurines) do
+				local quality = tonumber(figurine.Quality) or 0
+				if not EARLY_FIGURINE_QUALITIES[quality] then
+					addUniqueAsset(assets, seen, figurine.Icon)
+				end
+			end
+		end
+	end
+
 	local qualityConfig = configFolder:FindFirstChild("QualityConfig")
 	if qualityConfig then
 		local ok, config = pcall(require, qualityConfig)
 		if ok and config and config.Icons then
 			for _, icon in pairs(config.Icons) do
-				addAsset(icon)
+				addUniqueAsset(assets, seen, icon)
 			end
 		end
 	end
 
-	-- ProgressionConfig - 成就图标
 	local progressionConfig = configFolder:FindFirstChild("ProgressionConfig")
 	if progressionConfig then
 		local ok, config = pcall(require, progressionConfig)
 		if ok and config and config.Achievements then
 			for _, achievement in ipairs(config.Achievements) do
-				addAsset(achievement.Icon)
-			end
-		end
-	end
-
-	-- 递归扫描所有配置模块中的资源ID
-	local visited = {}
-	local function scanTable(value)
-		if type(value) ~= "table" then
-			if isAssetId(value) then
-				addAsset(value)
-			end
-			return
-		end
-		if visited[value] then
-			return
-		end
-		visited[value] = true
-		for _, child in pairs(value) do
-			scanTable(child)
-		end
-	end
-
-	for _, module in ipairs(configFolder:GetChildren()) do
-		if module:IsA("ModuleScript") then
-			if ENABLE_DEEP_CONFIG_SCAN then
-				local ok, result = pcall(require, module)
-				if ok and result then
-					scanTable(result)
-				end
+				addUniqueAsset(assets, seen, achievement.Icon)
 			end
 		end
 	end
@@ -355,23 +366,13 @@ local function collectInstanceAssets(containers)
 	end
 
 	local function scanInstance(instance)
+		-- 这里只收集图片/纹理资源，避免把模型网格也算进来。
 		if instance:IsA("ImageLabel") or instance:IsA("ImageButton") then
 			addAsset(instance.Image)
 		elseif instance:IsA("Decal") or instance:IsA("Texture") then
 			addAsset(instance.Texture)
 		elseif instance:IsA("ParticleEmitter") or instance:IsA("Trail") or instance:IsA("Beam") then
 			addAsset(instance.Texture)
-		elseif instance:IsA("MeshPart") then
-			addAsset(instance.TextureID)
-			addAsset(instance.MeshId)
-		elseif instance:IsA("SpecialMesh") then
-			addAsset(instance.MeshId)
-			addAsset(instance.TextureId)
-		elseif instance:IsA("SurfaceAppearance") then
-			addAsset(instance.ColorMap)
-			addAsset(instance.MetalnessMap)
-			addAsset(instance.NormalMap)
-			addAsset(instance.RoughnessMap)
 		end
 	end
 
@@ -391,7 +392,7 @@ local function collectInstanceAssets(containers)
 	return assets
 end
 
-local function collectModelInstances()
+local function collectModelInstances(folderNames, includeTemplates)
 	local instances = {}
 	local seen = {}
 
@@ -404,7 +405,7 @@ local function collectModelInstances()
 	end
 
 	-- 模型文件夹
-	for _, folderName in ipairs(MODEL_FOLDERS) do
+	for _, folderName in ipairs(folderNames or {}) do
 		local folder = ReplicatedStorage:FindFirstChild(folderName)
 		if folder then
 			for _, descendant in ipairs(folder:GetDescendants()) do
@@ -416,37 +417,14 @@ local function collectModelInstances()
 	end
 
 	-- UI模板
-	for _, templateName in ipairs(UI_TEMPLATES) do
-		local template = ReplicatedStorage:FindFirstChild(templateName)
-		if template then
-			addInstance(template)
-			for _, descendant in ipairs(template:GetDescendants()) do
-				addInstance(descendant)
-			end
-		end
-	end
-
-	return instances
-end
-
-local function collectPriorityModelInstances()
-	local instances = {}
-	local seen = {}
-
-	local function addInstance(instance)
-		if not instance or seen[instance] then
-			return
-		end
-		seen[instance] = true
-		table.insert(instances, instance)
-	end
-
-	for _, templateName in ipairs(UI_TEMPLATES) do
-		local template = ReplicatedStorage:FindFirstChild(templateName)
-		if template then
-			addInstance(template)
-			for _, descendant in ipairs(template:GetDescendants()) do
-				addInstance(descendant)
+	if includeTemplates then
+		for _, templateName in ipairs(UI_TEMPLATES) do
+			local template = ReplicatedStorage:FindFirstChild(templateName)
+			if template then
+				addInstance(template)
+				for _, descendant in ipairs(template:GetDescendants()) do
+					addInstance(descendant)
+				end
 			end
 		end
 	end
@@ -457,6 +435,7 @@ end
 --------------------------------------------------------------------------------
 -- 预加载执行
 --------------------------------------------------------------------------------
+
 local function preloadBatch(items, onProgress, startProgress, endProgress)
 	local total = #items
 	if total <= 0 then
@@ -470,20 +449,60 @@ local function preloadBatch(items, onProgress, startProgress, endProgress)
 	local loaded = 0
 	local progressRange = endProgress - startProgress
 
+	local function isStringBatch(batch)
+		for _, item in ipairs(batch) do
+			if type(item) ~= "string" then
+				return false
+			end
+		end
+		return #batch > 0
+	end
+
+	local function preloadStringBatchWithRetry(batch)
+		local pending = batch
+		for attempt = 1, 3 do
+			pcall(function()
+				ContentProvider:PreloadAsync(pending)
+			end)
+
+			local retry = {}
+			for _, contentId in ipairs(pending) do
+				local ok, status = pcall(function()
+					return ContentProvider:GetAssetFetchStatus(contentId)
+				end)
+				if not ok or status ~= Enum.AssetFetchStatus.Success then
+					table.insert(retry, contentId)
+				end
+			end
+
+			if #retry <= 0 then
+				return
+			end
+			pending = retry
+			task.wait(0.05 * attempt)
+		end
+	end
+
 	for startIndex = 1, total, batchSize do
 		local batch = {}
 		for index = startIndex, math.min(total, startIndex + batchSize - 1) do
 			table.insert(batch, items[index])
 		end
 
-		pcall(function()
-			ContentProvider:PreloadAsync(batch)
-		end)
+		if isStringBatch(batch) then
+			preloadStringBatchWithRetry(batch)
+		else
+			pcall(function()
+				ContentProvider:PreloadAsync(batch)
+			end)
+		end
 
 		loaded = loaded + #batch
 		if onProgress then
 			onProgress(startProgress + (loaded / total) * progressRange)
 		end
+		-- 每个批次后让出一帧，减少后台预加载造成的卡顿。
+		task.wait()
 	end
 end
 
@@ -568,6 +587,30 @@ local function ensureCameraSubject()
 	camera.CameraType = Enum.CameraType.Custom
 	camera.CameraSubject = humanoid
 end
+--------------------------------------------------------------------------------
+-- 后台预加载
+--------------------------------------------------------------------------------
+local function startDeferredPreload()
+	-- 延迟启动，避免与刚进场的玩法逻辑争用带宽与CPU。
+	task.delay(1, function()
+		local deferredImages = collectDeferredConfigAssets()
+
+		-- 后台补齐UI与模板相关资源。
+		local uiContainers = { StarterGui }
+		for _, templateName in ipairs(UI_TEMPLATES) do
+			local template = ReplicatedStorage:FindFirstChild(templateName)
+			if template then
+				table.insert(uiContainers, template)
+			end
+		end
+		deferredImages = mergeAssets(deferredImages, collectInstanceAssets(uiContainers))
+		preloadBatch(deferredImages, nil, 0, 1)
+
+		-- 后台补齐模型资源（明确不含Capsule）。
+		local backgroundModels = collectModelInstances(BACKGROUND_MODEL_FOLDERS, false)
+		preloadBatch(backgroundModels, nil, 0, 1)
+	end)
+end
 
 --------------------------------------------------------------------------------
 -- 主流程
@@ -605,51 +648,13 @@ local function main()
 
 	local waitForDataDone = startPlayerDataWait(DATA_WAIT_TIMEOUT)
 
-	-- 阶段1: 收集并预加载图片资源 (0% - 40%)
-	local imageAssets = collectConfigAssets()
 
-	-- 从UI容器收集额外图片
-	local uiContainers = { StarterGui }
-	for _, templateName in ipairs(UI_TEMPLATES) do
-		local template = ReplicatedStorage:FindFirstChild(templateName)
-		if template then
-			table.insert(uiContainers, template)
-		end
-	end
-	local uiAssets = collectInstanceAssets(uiContainers)
-	for _, asset in ipairs(uiAssets) do
-		local found = false
-		for _, existing in ipairs(imageAssets) do
-			if existing == asset then
-				found = true
-				break
-			end
-		end
-		if not found then
-			table.insert(imageAssets, asset)
-		end
-	end
-
+	-- 阶段1：最小阻塞资源
+	local imageAssets = collectBlockingImageAssets()
 	preloadBatch(imageAssets, setLoadingProgress, PROGRESS_IMAGE_START, PROGRESS_IMAGE_END)
 
-	-- 阶段2: 预加载模型实例 (40% - 70%)
 
-	-- 等待模型文件夹存在
-	for _, folderName in ipairs(MODEL_FOLDERS) do
-		waitForChildSafe(ReplicatedStorage, folderName, 10)
-	end
-
-	local priorityModels = collectPriorityModelInstances()
-	preloadBatch(priorityModels, setLoadingProgress, PROGRESS_MODEL_START, PROGRESS_MODEL_END)
-
-	task.spawn(function()
-		local allModels = collectModelInstances()
-		if #allModels > MODEL_PRELOAD_BLOCKING_LIMIT then
-			preloadBatch(allModels, nil, 0, 1)
-		end
-	end)
-
-	-- 阶段3: 等待玩家数据 (70% - 90%)
+	-- 阶段2：等待玩家数据
 	setLoadingProgress(PROGRESS_DATA_START)
 
 	if waitForDataDone then
@@ -659,7 +664,8 @@ local function main()
 	end
 	setLoadingProgress(PROGRESS_DATA_END)
 
-	-- 阶段4: 等待角色就绪 (90% - 100%)
+
+	-- 阶段3：等待角色就绪
 	setLoadingProgress(PROGRESS_CHARACTER_START)
 
 	local characterReady = waitForCharacter(CHARACTER_WAIT_TIMEOUT)
@@ -683,7 +689,13 @@ local function main()
 		guiBlocker.Restore()
 	end
 	ensureTopRightVisible()
+
+
+	-- 后台补齐剩余资源
+	startDeferredPreload()
 end
 
 -- 执行主流程
 main()
+
+

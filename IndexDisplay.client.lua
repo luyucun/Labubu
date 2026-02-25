@@ -5,7 +5,6 @@
 版本: V2.8
 职责: 手办索引界面显示与筛选]]
 
-local ContentProvider = game:GetService("ContentProvider")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
@@ -19,6 +18,7 @@ local FigurineConfig = require(configFolder:WaitForChild("FigurineConfig"))
 local QualityConfig = require(configFolder:WaitForChild("QualityConfig"))
 local BackpackVisibility = require(modulesFolder:WaitForChild("BackpackVisibility"))
 local GuiResolver = require(modulesFolder:WaitForChild("GuiResolver"))
+local IconDisplayHelper = require(modulesFolder:WaitForChild("IconDisplayHelper"))
 local modelRoot = ReplicatedStorage:WaitForChild("LBB")
 
 local mainGui = GuiResolver.WaitForLayer(playerGui, { "MainGui", "MainGUI", "Main", "MainUI" }, {
@@ -565,9 +565,7 @@ local function buildEntries()
 		end
 	end
 	if #iconsToPreload > 0 then
-		pcall(function()
-			ContentProvider:PreloadAsync(iconsToPreload)
-		end)
+		IconDisplayHelper.Preload(iconsToPreload, 3)
 	end
 
 	for index, info in ipairs(list) do
@@ -580,7 +578,7 @@ local function buildEntries()
 
 		local icon = clone:FindFirstChild("Icon", true)
 		if icon and (icon:IsA("ImageLabel") or icon:IsA("ImageButton")) then
-			icon.Image = info.Icon or ""
+			IconDisplayHelper.Apply(icon, info.Icon or "")
 		end
 
 		local nameLabel = clone:FindFirstChild("Name", true)

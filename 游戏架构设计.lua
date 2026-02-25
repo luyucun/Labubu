@@ -1,9 +1,9 @@
 ﻿--[[
 游戏架构设计文档
-版本: V5.0
-最后更新: 2026-02-04
+版本: V6.0
+最后更新: 2026-02-24
 ]]
-游戏架构设计 V5.0
+游戏架构设计 V6.0
 
 1. 设计原则
 - 服务端权威：货币、随机、产出、升级、存档都在服务端
@@ -29,6 +29,8 @@ ReplicatedStorage/
 - Config/QualityConfig（品质图标配置）
 - Config/ProgressionConfig（养成/成就配置）
 - Config/PotionConfig（药水配置）
+- Config/OnlineRewardConfig（在线奖励配置）
+- Config/SevenDayRewardConfig (seven-day login reward config)
 - OpenProgresTemplate（盲盒开启进度UI模板）
 - CapsuleInfo（盲盒信息BillboardGui模板）
 - Modules/FormatHelper（数值格式化）
@@ -56,6 +58,8 @@ ServerScriptService/
 - Server/GuideService: 新手引导流程控制/Beam指引/提示同步
 - Server/StarterPackService: 新手礼包通行证购买/奖励发放
 - Server/GroupRewardService: 群组奖励领取/奖励发放
+- Server/OnlineRewardService: 在线奖励累计、UTC0重置、领奖与状态同步
+- Server/SevenDayRewardService: seven-day login reward state, UTC0 refresh, claim and unlock-all
 - Server/LeaderboardService: 服务器内排行榜（总产速/总游戏时间）
 - Server/FriendBonusService: 同服好友加成统计与属性同步
 - Server/GlobalLeaderboardService: 全局排行榜数据维护与刷新推送
@@ -75,6 +79,8 @@ StarterPlayer/StarterPlayerScripts/
 - UI/GuideDisplay: 新手引导提示/手指动效
 - UI/StarterPackDisplay: 新手礼包界面/购买/领取弹框/价格渐变
 - UI/GroupRewardDisplay: 群组奖励界面显示/领取
+- UI/OnlineRewardDisplay: 在线奖励界面显示/倒计时/领取/红点与顶部时间同步
+- UI/SevenDayRewardDisplay: seven-day login reward UI, countdown, claim, red-point wiggle
 - UI/TestInfoDisplay: 统计测试UI显示
 - UI/ErrorHint: 统一错误提示显示
 - UI/GachaResult: 抽卡结果表现与升级进度动画
@@ -85,10 +91,11 @@ StarterPlayer/StarterPlayerScripts/
 - UI/FriendBonusDisplay: 好友加成文本显示
 - UI/OptionsDisplay: 设置界面(BGM/音效开关)与音效播放监听
 - UI/GlobalLeaderboardDisplay: 全局排行榜界面展示与刷新倒计时
-- UI/AssetPreload: 统一预加载流程（图片/模型/玩家数据/角色）
+- UI/AssetPreload: 首屏最小阻塞预加载（关键图片/玩家数据/角色）
+- Client/ProbabilityDisplay: 盲盒概率展示（靠近提示）
 
 ReplicatedFirst/
-- AssetPreload: 游戏启动时的统一预加载脚本（V2.0重构）
+- AssetPreload: 游戏启动时的首屏最小阻塞预加载脚本（V2.1）
 - Client/CameraFocus: 新手办升台镜头聚焦
 - Client/ConveyorDisplay: 传送带盲盒本地生成/移动表现/点击购买请求
 - Client/InteractionController: 点击交互、放置操作、开蛋请求
@@ -139,6 +146,10 @@ PlayerData
 - GuideStep: number
 - StarterPackPurchased: boolean
 - GroupRewardClaimed: boolean
+- OnlineRewardDayKey: number  -- UTC天索引
+- OnlineRewardPlayTime: number -- 当日累计在线秒数
+- OnlineRewardClaimed: { [RewardId] = true }
+- SevenDayReward: {Round, LastUnlockDayKey, Claimed={[Day]=true}, Claimable={[Day]=true}, PendingReset}
 
 说明
 - PendingCoins 为未收取累计，LastCollectTime 用于结算增量，在线/离线共用避免双算
@@ -162,6 +173,8 @@ PlayerData
 - GuideStep: number
 - StarterPackPurchased: boolean
 - GroupRewardClaimed: boolean
+- OnlineRewardDayKey: number  -- UTC天索引
+- OnlineRewardPlayTime: number -- 当日累计在线秒数
 
 4. 核心系统职责
 - DataService：会话缓存 + Dirty 标记 + 间隔保存 + BindToClose 兜底，UpdateAsync 持久化，离线结算，统计(在线时长/盲盒开启/总产出速度)，手办升级数据管理
@@ -172,6 +185,8 @@ PlayerData
 - FigurineService：开盒随机手办、展台放置、金币待领取/触碰领取、展台信息UI，升级展示
 - ClaimService：领取全部/十倍领取/自动领取通行证/付费买币/产速倍率购买、UI状态切换与自动结算
 - PotionService：药水购买/使用/倒计时同步与产速加成
+- OnlineRewardService：在线奖励累计、UTC0重置、领奖发放与状态推送
+- SevenDayRewardService: maintain cycle state, UTC0 unlock, claim grant and unlock-all product
 - GuideService：新手引导步骤控制、Beam目标挂载、提示文本同步
 - FriendBonusService：同服好友数量统计与加成属性同步，变更时调整产币结算基准
 - GlobalLeaderboardService：全局排行榜数据维护，按分钟刷新并推送榜单
@@ -183,6 +198,7 @@ PlayerData
 - 新手引导：购买任意盲盒 -> 引导至IdleFloor -> 点击背包放置 -> 开盒 -> 退出镜头后触碰领取金币
 - 新手礼包：购买通行证 -> 发放指定盲盒奖励 -> 弹出领取提示并隐藏入口
 - 群组奖励：右上角按钮打开 -> 服务端校验是否加入群组 -> 发放5个1003盲盒 -> 标记GroupRewardClaimed
+- 在线奖励：TopRight在线按钮打开界面 -> 服务端下发当日累计在线秒数与领奖状态 -> 达到阈值可领取盲盒/药水 -> 每日UTC0重置在线时长与领奖状态
 - V1.3 流程：传送带按刷新池权重生成盲盒 -> 玩家交互购买 -> 盲盒进背包 -> 放置地面 -> 倒计时结束
 - 传送带产蛋：每个Home独立计时 -> 按OutputSpeed解锁刷新池 -> 权重抽基础品质 -> 稀有度突变确定稀有度 -> 用品质+稀有度映射 CapsuleId -> 生成在途盲盒Uid并推送客户端 -> 客户端本地移动表现 -> 到期/购买由服务端通知客户端移除
 - 购买蛋：客户端点击 -> 服务端校验(归属/距离/金币/冷却) -> 扣费 -> 入背包 -> 移除蛋
@@ -200,6 +216,7 @@ PlayerData
 - 离线收益：依据离线时长与上限秒数结算，登录时写入 PendingCoins
 - 版本不同步：客户端检测版本缺口 -> RequestResync -> 服务端下发全量快照
 
+- Seven-day reward: after feature unlock, at most one new day unlocks per UTC0; after day7 fully claimed, reopening panel starts next round (day1 waits next UTC0); unlock-all product unlocks remaining days in current round.
 6. 产币计算与限制（可调）
 - baseValue = baseRate * RarityCoeff
 - perLevel = baseValue * QualityCoeff，若 0 < perLevel < 1 则每级按 1 计算
@@ -226,11 +243,14 @@ PlayerData
 - 抽卡结果播放前等待 AssetsPreloaded，并预加载本次盲盒/手办图标
 - Index列表的CheckIcon进入Check检视界面，ViewportFrame展示手办并支持拖拽旋转（+/-30）
 - Progression按钮打开养成界面，红点提示可领取奖励，ClaimTipsGui播放钻石领取动画
+- Online按钮与OnlineReward界面共享下一奖励倒计时；可领取时显示红点，领取后触发通用奖励弹框
+- 靠近传送带/地面盲盒时显示ProbabilityGui，已拥有显示手办图标，否则显示默认占位图并展示概率
 - GuideTips用于新手引导文本提示，TipsBg呼吸动效；背包条目Finger指引点击
 - 禁用系统背包，背包UI基于工具列表渲染，点击条目装备盲盒
 - 币数展示可基于 ServerTime + PendingCoins 推算，仅作表现
 - CoinNum 从玩家属性 Coins 同步显示，格式遵循 FormatHelper 大数值规则
 
+- SevenDays button appears after capsule-open threshold; red point shows when claimable and wiggles every 2 seconds.
 8. 性能与安全
 - 传送带最大蛋数限制，避免堆积
 - 所有随机与价格计算只在服务端
@@ -247,34 +267,22 @@ PlayerData
 - 新蛋/卡池/宠物仅改配置，不改核心逻辑
 - HomeTemplate可扩展装饰/交互点
 - PetService支持新增收益规则或被动技能
+11. 预加载流程（V2.1：首屏最小阻塞）
+- 目标：让玩家先进入可玩状态，首屏只等待最关键资源，降低卡加载和掉线率
+- 阻塞阶段（进入前必须完成）
+- Loading界面随机图（LOADING_IMAGES）
+- FigurineConfig 中 Quality=1/2（Leaf/Water）的手办 Icon
+- 玩家数据就绪标记 player.DataReady
+- 角色可控（Humanoid + HumanoidRootPart）
+- 后台阶段（进入后异步）
+- CapsuleConfig（Icon/DisplayImage）
+- FigurineConfig 中非 Leaf/Water 的 Icon
+- QualityConfig 图标、ProgressionConfig 成就图标
+- StarterGui 及 OpenProgresTemplate/CapsuleInfo/InfoPart 的图片类资源
+- LBB / Effect / GuideEffect 模型资源
+- 明确不做首屏阻塞：Capsule 模型资源（不在首屏预加载集合）
+- 关键属性
+- player.DataReady：服务端数据加载完成标记（服务端设置）
+- player.AssetsPreloaded：客户端首屏阻塞阶段完成标记（客户端设置）
 
-11. 预加载流程（V2.0）
-统一预加载确保玩家进入游戏前所有资源和数据都已就绪
 
-流程时序：
-┌─────────────────────────────────────────────────────────────┐
-│ 客户端 (AssetPreload)         │ 服务端 (Bootstrap)           │
-├─────────────────────────────────────────────────────────────┤
-│ 1. 显示Loading界面            │                              │
-│ 2. 预加载Loading图片          │                              │
-│ 3. 收集配置图片资源           │                              │
-│ 4. 预加载图片 (0-40%)         │ PlayerAdded触发              │
-│ 5. 预加载模型 (40-70%)        │ AssignHome分配家园           │
-│ 6. 等待DataReady (70-90%)     │ LoadPlayer加载数据           │
-│                               │ BindPlayer各服务             │
-│                               │ SetAttribute("DataReady",true)│
-│                               │ PushInitData推送数据         │
-│ 7. 等待角色就绪 (90-100%)     │ LoadCharacterAsync           │
-│ 8. 关闭Loading                │                              │
-│ 9. SetAttribute("AssetsPreloaded",true)                      │
-└─────────────────────────────────────────────────────────────┘
-
-预加载资源清单：
-- 图片资源：CapsuleConfig(Icon/DisplayImage)、FigurineConfig(Icon)、QualityConfig(Icons)、ProgressionConfig(Icon)、Loading图片
-- 模型文件夹：LBB、Capsule、Effect、GuideEffect
-- UI模板：OpenProgresTemplate、CapsuleInfo、InfoPart
-- StarterGui中所有UI图片
-
-关键属性：
-- player.DataReady: 服务端数据加载完成标记（服务端设置）
-- player.AssetsPreloaded: 客户端资源预加载完成标记（客户端设置）

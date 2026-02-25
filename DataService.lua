@@ -15,6 +15,7 @@ local FigurineConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForC
 local FigurineRateConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("FigurineRateConfig"))
 local UpgradeConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("UpgradeConfig"))
 local PotionConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("PotionConfig"))
+local OnlineRewardConfig = require(ReplicatedStorage:WaitForChild("Config"):WaitForChild("OnlineRewardConfig"))
 
 local DataService = {}
 DataService.__index = DataService
@@ -26,6 +27,7 @@ local autoSaveStarted = false
 local PLAYTIME_UPDATE_INTERVAL = 1
 local LOAD_RETRY_COUNT = 3
 local LOAD_RETRY_BASE_DELAY = 1.0
+local UTC_DAY_SECONDS = 86400
 
 local function fetchPlayerData(key)
 	local lastErr
@@ -68,6 +70,9 @@ local function defaultData()
 		GuideStep = 1,
 		StarterPackPurchased = false,
 		GroupRewardClaimed = false,
+		OnlineRewardDayKey = 0,
+		OnlineRewardPlayTime = 0,
+		OnlineRewardClaimed = {},
 	}
 end
 
@@ -241,6 +246,49 @@ end
 
 local function normalizeGroupRewardClaimed(value)
 	return value == true
+end
+
+local function normalizeOnlineRewardDayKey(value)
+	local num = tonumber(value)
+	if not num or num < 0 then
+		return 0
+	end
+	return math.floor(num)
+end
+
+local validOnlineRewardIds = {}
+for _, info in ipairs(OnlineRewardConfig.GetAll()) do
+	if info and info.Id then
+		validOnlineRewardIds[tonumber(info.Id) or info.Id] = true
+	end
+end
+
+local function normalizeOnlineRewardClaimed(value)
+	if type(value) ~= "table" then
+		return {}, true
+	end
+	local normalized = {}
+	local changed = false
+	for key, claimed in pairs(value) do
+		local id = tonumber(key) or key
+		if id and claimed == true and validOnlineRewardIds[id] then
+			normalized[id] = true
+			if key ~= id then
+				changed = true
+			end
+		else
+			changed = true
+		end
+	end
+	return normalized, changed
+end
+
+local function getUtcDayKey(timestamp)
+	local now = tonumber(timestamp) or os.time()
+	if now < 0 then
+		now = 0
+	end
+	return math.floor(now / UTC_DAY_SECONDS)
 end
 
 local function normalizeGuideStep(value)
@@ -515,6 +563,67 @@ local function getTotalBonusAddFromData(data, progressionBonus, now)
 	return normalizeBonusAdd(total)
 end
 
+local function cloneOnlineRewardClaimed(value)
+	local result = {}
+	if type(value) ~= "table" then
+		return result
+	end
+	for key, claimed in pairs(value) do
+		local id = tonumber(key) or key
+		if id and claimed == true and validOnlineRewardIds[id] then
+			result[id] = true
+		end
+	end
+	return result
+end
+
+local function ensureOnlineRewardState(record, now)
+	if not record or type(record.Data) ~= "table" then
+		return false
+	end
+	local data = record.Data
+	local changed = false
+
+	local dayKey = normalizeOnlineRewardDayKey(data.OnlineRewardDayKey)
+	local playTime = normalizeCount(data.OnlineRewardPlayTime)
+	local claimed, claimedChanged = normalizeOnlineRewardClaimed(data.OnlineRewardClaimed)
+	if claimedChanged then
+		changed = true
+	end
+	if data.OnlineRewardDayKey ~= dayKey then
+		changed = true
+	end
+	if data.OnlineRewardPlayTime ~= playTime then
+		changed = true
+	end
+
+	local currentDay = getUtcDayKey(now)
+	if dayKey ~= currentDay then
+		dayKey = currentDay
+		playTime = 0
+		if next(claimed) ~= nil then
+			claimed = {}
+		end
+		changed = true
+	end
+
+	data.OnlineRewardDayKey = dayKey
+	data.OnlineRewardPlayTime = playTime
+	data.OnlineRewardClaimed = claimed
+	if changed then
+		record.Dirty = true
+	end
+	return changed
+end
+
+local function applyOnlineRewardAttributes(player, data)
+	if not player or not player.Parent or type(data) ~= "table" then
+		return
+	end
+	player:SetAttribute("OnlineRewardDayKey", normalizeOnlineRewardDayKey(data.OnlineRewardDayKey))
+	player:SetAttribute("OnlineRewardPlayTime", normalizeCount(data.OnlineRewardPlayTime))
+end
+
 local function adjustCollectTimesForOutputBonusChange(player, oldFactor, newFactor)
 	if not player or oldFactor == newFactor then
 		return
@@ -616,6 +725,7 @@ local function applyStatsAttributes(player, data)
 	player:SetAttribute("GuideStep", normalizeGuideStep(data.GuideStep))
 	player:SetAttribute("StarterPackPurchased", normalizeStarterPackPurchased(data.StarterPackPurchased))
 	player:SetAttribute("GroupRewardClaimed", normalizeGroupRewardClaimed(data.GroupRewardClaimed))
+	applyOnlineRewardAttributes(player, data)
 end
 
 local function ensureFigurineOwnedFolder(player)
@@ -685,8 +795,14 @@ local function updatePlaytimeRecord(record, player)
 	end
 	local now = os.time()
 	local last = record.LastPlaytimeUpdate or now
+	local lastDayKey = getUtcDayKey(last)
+	local nowDayKey = getUtcDayKey(now)
+	local onlineChanged = ensureOnlineRewardState(record, now)
 	if now <= last then
 		record.LastPlaytimeUpdate = now
+		if onlineChanged then
+			applyOnlineRewardAttributes(player, record.Data)
+		end
 		return
 	end
 	local delta = now - last
@@ -694,8 +810,35 @@ local function updatePlaytimeRecord(record, player)
 	local total = normalizeCount(record.Data.TotalPlayTime) + delta
 	record.Data.TotalPlayTime = total
 	record.Dirty = true
+
+	local onlineSeconds = normalizeCount(record.Data.OnlineRewardPlayTime)
+	if delta > 0 then
+		if nowDayKey == lastDayKey then
+			local nextOnline = onlineSeconds + delta
+			if nextOnline ~= onlineSeconds then
+				onlineSeconds = nextOnline
+				record.Data.OnlineRewardPlayTime = onlineSeconds
+				record.Dirty = true
+				onlineChanged = true
+			end
+		else
+			-- øÁ‘ΩUTC 00:00£∫÷ªÕ≥º∆ΩÒÃÏ(UTC)µƒ‘⁄œﬂ√Î ˝£¨±‹√‚∞—◊ÚÃÏµƒ√Î ˝À„Ω¯ΩÒÃÏ°£
+			local sinceMidnight = now - (nowDayKey * UTC_DAY_SECONDS)
+			sinceMidnight = math.max(0, math.floor(tonumber(sinceMidnight) or 0))
+			if sinceMidnight ~= onlineSeconds then
+				onlineSeconds = sinceMidnight
+				record.Data.OnlineRewardPlayTime = onlineSeconds
+				record.Dirty = true
+				onlineChanged = true
+			end
+		end
+	end
+
 	if player and player.Parent then
 		player:SetAttribute("TotalPlayTime", total)
+		if onlineChanged then
+			applyOnlineRewardAttributes(player, record.Data)
+		end
 	end
 	if #playtimeListeners > 0 and player and player.Parent then
 		for _, callback in ipairs(playtimeListeners) do
@@ -855,6 +998,36 @@ function DataService:LoadPlayer(player)
 	end
 
 
+	local normalizedOnlineDay = normalizeOnlineRewardDayKey(data.OnlineRewardDayKey)
+	if data.OnlineRewardDayKey ~= normalizedOnlineDay then
+		data.OnlineRewardDayKey = normalizedOnlineDay
+		needsSave = true
+	end
+
+	local normalizedOnlinePlayTime = normalizeCount(data.OnlineRewardPlayTime)
+	if data.OnlineRewardPlayTime ~= normalizedOnlinePlayTime then
+		data.OnlineRewardPlayTime = normalizedOnlinePlayTime
+		needsSave = true
+	end
+
+	local normalizedOnlineClaimed, onlineClaimedChanged = normalizeOnlineRewardClaimed(data.OnlineRewardClaimed)
+	data.OnlineRewardClaimed = normalizedOnlineClaimed
+	if onlineClaimedChanged then
+		needsSave = true
+	end
+
+	local currentDayKey = getUtcDayKey(os.time())
+	if data.OnlineRewardDayKey ~= currentDayKey then
+		data.OnlineRewardDayKey = currentDayKey
+		if data.OnlineRewardPlayTime ~= 0 then
+			data.OnlineRewardPlayTime = 0
+		end
+		if next(data.OnlineRewardClaimed) ~= nil then
+			data.OnlineRewardClaimed = {}
+		end
+		needsSave = true
+	end
+
 	local normalizedPlaytime = normalizeCount(data.TotalPlayTime)
 	if data.TotalPlayTime ~= normalizedPlaytime then
 		data.TotalPlayTime = normalizedPlaytime
@@ -985,6 +1158,87 @@ function DataService:SetGroupRewardClaimed(player, claimed)
 	if player and player.Parent then
 		player:SetAttribute("GroupRewardClaimed", normalized)
 	end
+end
+
+function DataService:ResetOnlineRewardIfNeeded(player, now)
+	local record = sessionData[player.UserId]
+	if not record then
+		return false
+	end
+	local changed = ensureOnlineRewardState(record, now or os.time())
+	if changed then
+		applyOnlineRewardAttributes(player, record.Data)
+	end
+	return changed
+end
+
+function DataService:GetOnlineRewardPlayTime(player, now)
+	local record = sessionData[player.UserId]
+	if not record then
+		return 0
+	end
+	ensureOnlineRewardState(record, now or os.time())
+	return normalizeCount(record.Data.OnlineRewardPlayTime)
+end
+
+function DataService:GetOnlineRewardClaimedMap(player, now)
+	local record = sessionData[player.UserId]
+	if not record then
+		return {}
+	end
+	ensureOnlineRewardState(record, now or os.time())
+	return cloneOnlineRewardClaimed(record.Data.OnlineRewardClaimed)
+end
+
+function DataService:IsOnlineRewardClaimed(player, rewardId, now)
+	local record = sessionData[player.UserId]
+	if not record then
+		return false
+	end
+	local id = tonumber(rewardId) or rewardId
+	if not id or not validOnlineRewardIds[id] then
+		return false
+	end
+	ensureOnlineRewardState(record, now or os.time())
+	return record.Data.OnlineRewardClaimed[id] == true
+end
+
+function DataService:SetOnlineRewardClaimed(player, rewardId, claimed, now)
+	local record = sessionData[player.UserId]
+	if not record then
+		return false
+	end
+	local id = tonumber(rewardId) or rewardId
+	if not id or not validOnlineRewardIds[id] then
+		return false
+	end
+	ensureOnlineRewardState(record, now or os.time())
+	if claimed then
+		if record.Data.OnlineRewardClaimed[id] == true then
+			return false
+		end
+		record.Data.OnlineRewardClaimed[id] = true
+	else
+		if record.Data.OnlineRewardClaimed[id] == nil then
+			return false
+		end
+		record.Data.OnlineRewardClaimed[id] = nil
+	end
+	record.Dirty = true
+	return true
+end
+
+function DataService:GetOnlineRewardSnapshot(player, now)
+	local record = sessionData[player.UserId]
+	if not record then
+		return nil
+	end
+	ensureOnlineRewardState(record, now or os.time())
+	return {
+		DayKey = normalizeOnlineRewardDayKey(record.Data.OnlineRewardDayKey),
+		OnlineSeconds = normalizeCount(record.Data.OnlineRewardPlayTime),
+		Claimed = cloneOnlineRewardClaimed(record.Data.OnlineRewardClaimed),
+	}
 end
 
 function DataService:GetProgressionClaimed(player)
@@ -1904,7 +2158,7 @@ function DataService:GetSnapshot(player)
 	if not record then
 		return nil
 	end
-	-- ËøîÂõûÁé©ÂÆ∂Êï∞ÊçÆÁöÑÊµÖÊã∑Ë¥ùÁî®‰∫éÂÆ¢Êà∑Á´ØÂêåÊ≠•
+	-- ËøîÂõûÁé©ÂÆ∂Êï∞ÊçÆÁöÑÊµÖÊã∑Ë¥ùÁî®‰∫éÂÆ¢Êà∑Á´ØÂêåÊ≠?
 	local snapshot = {}
 	for key, value in pairs(record.Data) do
 		snapshot[key] = value

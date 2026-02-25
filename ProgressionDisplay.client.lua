@@ -1,4 +1,4 @@
---[[
+﻿--[[
 脚本名称: ProgressionDisplay
 脚本类型: LocalScript
 脚本位置: StarterPlayer/StarterPlayerScripts/UI/ProgressionDisplay
@@ -18,6 +18,7 @@ local playerGui = player:WaitForChild("PlayerGui")
 local configFolder = ReplicatedStorage:WaitForChild("Config")
 local modulesFolder = ReplicatedStorage:WaitForChild("Modules")
 local ProgressionConfig = require(configFolder:WaitForChild("ProgressionConfig"))
+local AudioManager = require(modulesFolder:WaitForChild("AudioManager"))
 local GuiResolver = require(modulesFolder:WaitForChild("GuiResolver"))
 
 local function ensureLabubuEvents()
@@ -469,28 +470,88 @@ playerGui.DescendantAdded:Connect(function(child)
 	end
 end)
 
-local claimTipsGui = GuiResolver.FindLayer(playerGui, { "ClaimTipsGui", "ClaimTipsGUI" }, {
-	"ClaimSuccessful",
-	"LightBg",
-})
-local claimSuccessful = claimTipsGui and claimTipsGui:FindFirstChild("ClaimSuccessful", true)
-local lightBg = claimTipsGui and claimTipsGui:FindFirstChild("LightBg", true)
-local itemTemplate = claimSuccessful and claimSuccessful:FindFirstChild("ItemTemplate", true)
-local itemIcon = itemTemplate and itemTemplate:FindFirstChild("Icon", true)
-local itemNumber = itemTemplate and itemTemplate:FindFirstChild("Number", true)
+local claimTipsGui
+local claimSuccessful
+local lightBg
+local itemTemplate
+local itemIcon
+local itemNumber
+local claimTipsWarned = false
+local pendingClaimReward = nil
 
-if claimTipsGui and claimTipsGui:IsA("LayerCollector") then
-	claimTipsGui.Enabled = true
+local function bindClaimTipsNodes(searchRoot)
+	if not searchRoot then
+		return false
+	end
+	claimSuccessful = searchRoot:FindFirstChild("ClaimSuccessful", true)
+	lightBg = searchRoot:FindFirstChild("LightBg", true)
+	itemTemplate = claimSuccessful and claimSuccessful:FindFirstChild("ItemTemplate", true)
+		or searchRoot:FindFirstChild("ItemTemplate", true)
+	itemIcon = itemTemplate and itemTemplate:FindFirstChild("Icon", true)
+	itemNumber = itemTemplate and itemTemplate:FindFirstChild("Number", true)
+
+	if claimTipsGui and claimTipsGui:IsA("LayerCollector") then
+		claimTipsGui.Enabled = true
+	end
+	if claimSuccessful and claimSuccessful:IsA("GuiObject") then
+		claimSuccessful.Visible = false
+	end
+	if lightBg and lightBg:IsA("GuiObject") then
+		lightBg.Visible = false
+	end
+	if itemTemplate and itemTemplate:IsA("GuiObject") then
+		itemTemplate.Visible = false
+	end
+	return claimSuccessful ~= nil
 end
-if claimSuccessful and claimSuccessful:IsA("GuiObject") then
-	claimSuccessful.Visible = false
+
+local function resolveClaimTips(waitSeconds)
+	if not claimTipsGui or not claimTipsGui.Parent then
+		if waitSeconds and waitSeconds > 0 then
+			claimTipsGui = GuiResolver.WaitForLayer(playerGui, { "ClaimTipsGui", "ClaimTipsGUI" }, {
+				"ClaimSuccessful",
+				"LightBg",
+			}, waitSeconds)
+		else
+			claimTipsGui = GuiResolver.FindLayer(playerGui, { "ClaimTipsGui", "ClaimTipsGUI" }, {
+				"ClaimSuccessful",
+				"LightBg",
+			})
+		end
+	end
+	if claimTipsGui and claimTipsGui.Parent then
+		local ok = bindClaimTipsNodes(claimTipsGui)
+		if ok and pendingClaimReward ~= nil then
+			local reward = pendingClaimReward
+			pendingClaimReward = nil
+			task.defer(function()
+				playClaimTips(reward)
+			end)
+		end
+		return ok
+	end
+	local fallback = playerGui:FindFirstChild("ClaimSuccessful", true)
+	if fallback and fallback:IsA("GuiObject") then
+		claimTipsGui = fallback:FindFirstAncestorWhichIsA("LayerCollector")
+		local searchRoot = claimTipsGui or fallback.Parent or playerGui
+		local ok = bindClaimTipsNodes(searchRoot)
+		if ok and pendingClaimReward ~= nil then
+			local reward = pendingClaimReward
+			pendingClaimReward = nil
+			task.defer(function()
+				playClaimTips(reward)
+			end)
+		end
+		return ok
+	end
+	if not claimTipsWarned then
+		warn("[ProgressionDisplay] ClaimTipsGui not found")
+		claimTipsWarned = true
+	end
+	return false
 end
-if lightBg and lightBg:IsA("GuiObject") then
-	lightBg.Visible = false
-end
-if itemTemplate and itemTemplate:IsA("GuiObject") then
-	itemTemplate.Visible = false
-end
+
+resolveClaimTips(0)
 
 local claimCloseConn = nil
 local claimCloseReady = false
@@ -529,10 +590,22 @@ local function closeClaimTips(restoreProgression)
 end
 
 local function playClaimTips(rewardCount)
+	if not claimSuccessful or not claimSuccessful.Parent then
+		resolveClaimTips(5)
+	end
 	if not claimSuccessful or not claimSuccessful:IsA("GuiObject") then
+		pendingClaimReward = rewardCount
 		return
 	end
 	closeClaimTips(false)
+	if claimTipsGui and claimTipsGui:IsA("LayerCollector") then
+		claimTipsGui.Enabled = true
+	end
+	if AudioManager and AudioManager.PlaySfx then
+		pcall(function()
+			AudioManager.PlaySfx("RewardPopup")
+		end)
+	end
 	if progressionBg and progressionBg:IsA("GuiObject") then
 		progressionWasVisible = progressionBg.Visible
 		progressionBg.Visible = false
@@ -605,3 +678,5 @@ end
 task.defer(function()
 	requestProgressionDataEvent:FireServer()
 end)
+
+

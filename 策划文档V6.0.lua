@@ -1842,3 +1842,132 @@ Id	名字	加成数值	生效时间（分钟）	钻石价格	开发者商品
 奖励内容是为玩家发放5个1003这个id的盲盒
 
 至于我们的群组id，是602157319
+
+
+策划文档V5.8  盲盒信息展示
+
+概述：我们需要在游戏中给传送带上的盲盒和放在地上的盲盒挂在一个对应的手办的抽取概率
+
+详细规则：
+
+1.在盲盒在传送带上生成后，以及放在地上开始倒计时后，如果玩家靠近这个盲盒，则要展示出这个盲盒的开启概率信息，触发条件和现在触发交互按钮的条件是一致的，都按距离触发
+2.在ReplicatedStorage下去寻找一个叫ProbabilityGui的BillboardGui，复制一份，挂载给这个模型，也就是成为这个模型的直接子节点
+3.相关信息展示逻辑是：
+    1）ProbabilityGui - Bg - ItemTemplate是模板，承载每个手办的相关信息展示，默认是隐藏的，当生成信息时，去找这个盲盒下有多少个手办，id从小到大依次复制出来并生成对应信息
+    2）ProbabilityGui - Bg - ItemTemplate - Icon是用于展示这个手办的图标，注意：如果这个手办玩家已经获得过，则需要把Icon的图片资源换成这个手办的图标，如果这个手办玩家还未获得，则需要把Icon的图片默认展示为：rbxassetid://15476451150
+    3）ProbabilityGui - Bg - ItemTemplate - Probability用于展示这个手办的抽取概率，在盲盒中根据权重可以算出这个手办的对应的抽取概率，经过换算需要显示成百分数，精确到小数点后两位，比如12.34%
+    4）玩家离开后再把这个ui给隐藏
+
+
+策划文档V5.9 在线奖励
+
+概述：我们需要加一个在线奖励系统，玩家累计到达一定的在线时长，可以获得对应奖励
+
+详细规则：
+1.我们的在线时长是配置秒，需要在对应的客户端中转换成对应的小时和分钟
+2.我们的在线奖励在每天的utc0点重置奖励领取状态与重置在线时长累计
+3.在一天内玩家多次上线离线再上线，总的在线时长是累加的，只有到utc0点的时候会重置
+
+我们的奖励类型有：
+1.发放指定Id的盲盒X个
+2.发放指定id的加成药水x个
+
+我们目前规划的在线奖励要求的时长与对应的奖励内容是：
+ID	时间（秒）	奖励	数量
+1	180	盲盒1003	1
+2	360	药水1001	1
+3	600	盲盒1003	1
+4	900	盲盒1003	1
+5	1500	盲盒1006	1
+6	2400	盲盒1003	2
+7	3000	药水1002	1
+8	3600	盲盒1003	2
+9	4500	盲盒1003	2
+10	5400	盲盒1006	1
+
+
+相应的客户端规则是：
+1.玩家点击StarterGui - TopRightGui - Bg - Online这个按钮，可以打开在线奖励界面（将StarterGui - OnlineReward - Bg的visible属性改成true）
+2.玩家点击StarterGui - OnlineReward - Bg - Title - CloseButton按钮，关闭奖励界面（将StarterGui - OnlineReward - Bg的visible属性改成false）
+3.StarterGui - OnlineReward - Bg - NextReward是一个textlabel，用来显示玩家距离下一个奖励可领取还有多久倒计时，格式是：Next Reward:xx:yy，xx是分钟，yy是秒，比如下个奖励还有3分钟，就03:00,倒计时结束后下个奖励还有15分钟，就显示为15：00
+4.当有可领取的在线奖励时，需要把StarterGui - TopRightGui - Bg - Online - RedPoint的visible属性改成true，领取完后再隐藏
+
+下面介绍在线奖励详细具体单个奖励的对应规则：
+1.以StarterGui - OnlineReward - Bg - Bg01 - Reward01为例子，这是我们的第一份奖励，对应id是1的那份奖励
+2.在奖励还不能领取的时候，OnlineReward - Bg - Bg01 - Reward01 - Time是一个textlabel，用于显示这个奖励还有多久才能领取，格式是xx:yy，xx是分钟，yy是秒，哪怕超过了100分钟，也显示是分钟
+3.前面一个奖励如果还未倒计时结束，这个奖励还不能领取时，这里的文本保持默认的内容，代码不控制，只有在下一个可领取的奖励就是这个奖励时，才把文本变成倒计时样式
+4.当奖励变成可领取状态时，需要把OnlineReward - Bg - Bg01 - Reward01 - Time隐藏，把OnlineReward - Bg - Bg01 - Reward01 - Claim按钮显示出来
+5.玩家点击claim按钮，给玩法发放道具，并且播放恭喜获得的弹框效果（游戏内通用的领取奖励弹框效果）
+6.玩家领取后，把OnlineReward - Bg - Bg01 - Reward01 - Claim也隐藏，然后把OnlineReward - Bg - Bg01 - Reward01 - Claimed显示出来
+7.等奖励重置后，再把所有ui内容重置回默认状态
+
+每个奖励对应的具体的ui是：
+
+id	路径
+1	StarterGui - OnlineReward - Bg - Bg01 - Reward01
+2	StarterGui - OnlineReward - Bg - Bg01 - Reward02
+3	StarterGui - OnlineReward - Bg - Bg01 - Reward03
+4	StarterGui - OnlineReward - Bg - Bg01 - Reward04
+5	StarterGui - OnlineReward - Bg - Bg01 - Reward05
+6	StarterGui - OnlineReward - Bg - Bg02 - Reward01
+7	StarterGui - OnlineReward - Bg - Bg02 - Reward02
+8	StarterGui - OnlineReward - Bg - Bg03 - Reward03
+9	StarterGui - OnlineReward - Bg - Bg04 - Reward04
+10	StarterGui - OnlineReward - Bg - Bg05 - Reward05
+
+补充个规则：
+StarterGui - TopRightGui - Bg - Online - Time是一个textlabel，用于显示下一个可领取的奖励的倒计时，需要跟在线奖励界面里最新的正在倒计时的奖励的倒计时对上，格式也一样，比如里面最新的第三个奖励在倒计时，这里也显示第三个的倒计时
+
+策划文档V6.0 七日登录奖励
+
+概述：我们需要开发一套“七日登录奖励”系统，玩家可以每天登录领取一份奖励
+
+基础逻辑简单来说就是：只要玩家登录，就可以领取一份今日的登录奖励，然后明天再登录就可以领下一天的奖励，如果明天没登录，后天登录了，也是领的第二天的奖励
+
+详细规则是：
+
+1.玩家登录的第一天触发七日奖励的第一天的奖励领取，所以新玩家第一天的时候的奖励是默认解锁可以领取的
+2.每天utc0点是登录奖励刷新的节点，奖励刷新后，只要玩家再次登录，就可以领取这份奖励（当然如果玩家在线并且奖励刷新了不用下线可以直接领），所以只要玩家登录了，就可以领新刷新的这份奖励，哪怕是好几天不登陆，再次登录也是领这份奖励，因为状态已经变成了可领取
+3.具体逻辑我建议做成玩家上线时去判定奖励刷新即可，比如玩家好几天不登陆，突然登录了，判断这个时间点跟上一份奖励领取时的中间是否存在一个utc0点，如果有则认为就是跨天了，就应该能领取最新一份的登录奖励了。
+4.所以极限情况是玩家23点59分登录领了第一天的登录奖励然后过了utc0点，又能立刻领第二天的登录奖励，然后过了好几天才再次登录后，可以领第三天的登录奖励
+5.所以我们这个本质是累计登录奖励，而不是登陆一次过七天再登录就能领全部7天的奖励
+
+奖励类型有：
+1.发放指定Id的盲盒，发放数量可变化，我会在下面具体写清楚
+2.发放指定Id的药水，发放数量可变化，我也会写清楚
+
+详细发放奖励需求：
+第一天：1004这个Id的盲盒，数量是1
+第二天：1001这个Id的药水，数量是1
+第三天：1004这个id的盲盒，数量2
+第四天：1001这个Id的药水，数量是2
+第五天：1005这个Id的盲盒，数量是1
+第六天：1005这个Id的盲盒，数量是1
+第七天：1007这个Id的盲盒，数量是2
+
+具体客户端逻辑是：
+1.玩家点击StarterGui - TopRightGui - Bg - SevenDays - Button这个按钮，可以打开七日登录奖励界面（也就是把StarterGui - SevenDays - Bg的Visible属性改成True，同时把StarterGui - SevenDays - BlackBg的Visible属性改成True）
+2.玩家点击SevenDays - Bg - Title - CloseButton这个按钮可以关闭七日登录奖励界面
+3.SevenDays - Bg - NextReward是一个TextLabel，用于显示下一个奖励的刷新倒计时格式固定就是：Refresh In:XX:YY,XX:YY就是小时：分钟，也就是距离下个UTC0点的倒计时
+4.点击StarterGui - SevenDays - Bg - UnlockAll这个按钮，直接触发对开发者商品：3489888670的购买，购买成功后，立刻解锁本轮7天奖励中的所有奖励，全部变成可领取状态
+    a.这里需要有一些特殊处理：当玩家购买这个商品后，会把当前剩余的未购买的奖励全部变成可领取状态。
+    b.玩家如果把所有奖励都领取了，那么关闭这个界面，再次打开后，会重新刷新一份新的7天奖励，注意这是一份新的7天奖励，其中第一天的奖励是不能领的，要等下一个utc0点刷新才能领第一天的奖励，其实可以视为第8天的奖励，后面都是一样的逻辑
+    c.同样的，玩家通过登录7天领取了所有奖励后，关闭界面，再打开也是会重新刷新一份新的7天奖励出来
+    d.玩家可以通不断购买开发者商品3535358435，来不断解锁当前轮次的7天奖励
+
+5.Bg下有Reward01到Reward07共7个Frame ，每个都是代表某天的奖励，我们以Reward01举例来说明规则，Reward01就是第一天的奖励，Reward02就是第二天的奖励，以此类推
+    a.Reward01 - DayNum是代表当前是第几天的文本，在这种状态下，当一个奖励还未解锁还不能领取时，DayNum的visible属性应该设置为True，也就是显示为第几天，你不用去设定DayNum的文本内容，只需要控制是否显示即可
+    b.Reward01 - Claim是一个按钮，是领取按钮，如果某个奖励已经变成了可领取状态，则把Claim的Visible属性改成True，把上面的DayNum的Visible属性改成False，点击Claim可以领取奖励，注意点击的时候需要有一个点击效果
+    c.Reward01 - Claimed是一个textlabel文本，用于领取完奖励后显示出来代表奖励已经领取了，领完奖励后，需要把Claimed的visible属性改成True，把Claim的Bisible属性改成False
+    d.奖励领取成功后，需要把Reward01 - Bg的Visible属性改成True
+
+    e.注意默认状态下，只有DayNum的Visible属性是默认true的，其他都是false
+    f.当刷新了一轮新的奖励后，需要把所有奖励的状态全部改成默认状态
+
+
+6.当玩家领取奖励成功后，需要弹出文本提示：Reward Claimed!，这里就用我们系统通用的弹出样式即可，但是这里的Reward Claimed!这个文本要用绿色，动效保持和其他的一致
+
+7.StarterGui - TopRightGui - SevenDays - RedPoint是红点，默认的Visible属性是False，当有可领取但是玩家未领取的七日登录奖励时，需要把红点显示出来，并且红点在显示状态下，需要每2秒给红点一个小动效，左右抖动一下，每2秒播一次，提醒玩家看到
+
+8.SevenDays是系统功能按钮，功能未解锁时是隐藏状态，功能解锁后才能显示出来按钮。
+9.解锁条件是：玩家至少开启了10个盲盒后才开启

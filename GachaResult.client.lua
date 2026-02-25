@@ -1,4 +1,4 @@
---[[
+﻿--[[
 脚本名称: GachaResult
 脚本类型: LocalScript
 脚本位置: StarterPlayer/StarterPlayerScripts/UI/GachaResult
@@ -24,7 +24,9 @@ local FigurineRateConfig = require(configFolder:WaitForChild("FigurineRateConfig
 local UpgradeConfig = require(configFolder:WaitForChild("UpgradeConfig"))
 local FormatHelper = require(modulesFolder:WaitForChild("FormatHelper"))
 local BackpackVisibility = require(modulesFolder:WaitForChild("BackpackVisibility"))
+local AudioManager = require(modulesFolder:WaitForChild("AudioManager"))
 local GuiResolver = require(modulesFolder:WaitForChild("GuiResolver"))
+local IconDisplayHelper = require(modulesFolder:WaitForChild("IconDisplayHelper"))
 
 local gachaGui = GuiResolver.WaitForLayer(playerGui, { "GachaResult", "GachaResultGui", "GachaResultGUI" }, {
 	"Result",
@@ -177,7 +179,7 @@ end
 local function setImage(imageObject, image)
 	local target = resolveImageTarget(imageObject)
 	if target then
-		target.Image = image or ""
+		IconDisplayHelper.Apply(target, image or "")
 	end
 end
 
@@ -459,9 +461,7 @@ local function preloadGachaAssets(capsuleInfo, figurineInfo)
 
 	-- 先同步预加载所有图片资源（阻塞等待完成）
 	if #imageAssets > 0 then
-		pcall(function()
-			ContentProvider:PreloadAsync(imageAssets)
-		end)
+		IconDisplayHelper.Preload(imageAssets, 3)
 	end
 
 	-- 预加载手办模型
@@ -811,6 +811,7 @@ local function playSequence(payload)
 		return
 	end
 
+	AudioManager.PlaySfx("GachaReveal")
 	startLightBg()
 	setVisible(resultCover, false)
 	updateQualityIndicators(resultFrame, figurineQuality)
@@ -938,3 +939,4 @@ local function bindOpenEggResult()
 end
 
 bindOpenEggResult()
+

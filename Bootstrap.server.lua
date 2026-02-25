@@ -24,6 +24,8 @@ local GlobalLeaderboardService = require(script.Parent:WaitForChild("GlobalLeade
 local GuideService = require(script.Parent:WaitForChild("GuideService"))
 local StarterPackService = require(script.Parent:WaitForChild("StarterPackService"))
 local GroupRewardService = require(script.Parent:WaitForChild("GroupRewardService"))
+local OnlineRewardService = require(script.Parent:WaitForChild("OnlineRewardService"))
+local SevenDayRewardService = require(script.Parent:WaitForChild("SevenDayRewardService"))
 
 --------------------------------------------------------------------------------
 -- RemoteEvent管理
@@ -84,6 +86,8 @@ GlobalLeaderboardService:Init()
 GuideService:Init()
 StarterPackService:Init()
 GroupRewardService:Init()
+OnlineRewardService:Init()
+SevenDayRewardService:Init()
 
 --------------------------------------------------------------------------------
 -- 关服保存
@@ -158,6 +162,8 @@ local function handlePlayerAdded(player)
 	GuideService:BindPlayer(player)
 	StarterPackService:BindPlayer(player)
 	GroupRewardService:BindPlayer(player)
+	OnlineRewardService:BindPlayer(player)
+	SevenDayRewardService:BindPlayer(player)
 
 	EggService:BindPlayer(player)
 
@@ -191,6 +197,8 @@ local function handlePlayerRemoving(player)
 	GuideService:UnbindPlayer(player)
 	StarterPackService:UnbindPlayer(player)
 	GroupRewardService:UnbindPlayer(player)
+	OnlineRewardService:UnbindPlayer(player)
+	SevenDayRewardService:UnbindPlayer(player)
 	FriendBonusService:HandlePlayerRemoving(player)
 	DataService:UnloadPlayer(player, true)
 	HomeService:ReleaseHome(player)

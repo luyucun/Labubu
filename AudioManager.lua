@@ -1,4 +1,4 @@
---[[
+﻿--[[
 脚本名称: AudioManager
 脚本类型: ModuleScript
 脚本位置: ReplicatedStorage/Modules/AudioManager
@@ -10,11 +10,13 @@ local SoundService = game:GetService("SoundService")
 
 local AudioManager = {}
 
-local BGM_ID = "rbxassetid://85493154394720"
+local BGM_ID = "rbxassetid://1843404009"
 local SFX_IDS = {
 	Collect = "rbxassetid://307631257",
 	Unlock = "rbxassetid://3072176098",
 	Warning = "rbxassetid://3072176098",
+	RewardPopup = "rbxassetid://3954788070",
+	GachaReveal = "rbxassetid://72535887807534",
 }
 
 local state = {
@@ -118,3 +120,5 @@ function AudioManager.PlaySfx(kind)
 end
 
 return AudioManager
+
+

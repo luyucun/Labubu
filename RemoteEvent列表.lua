@@ -1,4 +1,4 @@
-﻿RemoteEvent列表 V1.2
+﻿RemoteEvent列表 V1.4
 
 命名说明
 - 统一放在 ReplicatedStorage/Events/LabubuEvents
@@ -42,6 +42,15 @@ ReplicatedStorage
         ├── PushProgressionData（RemoteEvent）
         ├── RequestProgressionClaim（RemoteEvent）
         ├── PushProgressionClaimed（RemoteEvent）
+        ├── RequestOnlineRewardData (RemoteEvent)
+        ├── PushOnlineRewardData (RemoteEvent)
+        ├── RequestOnlineRewardClaim (RemoteEvent)
+        ├── PushOnlineRewardClaimed (RemoteEvent)
+        ├── RequestSevenDayRewardData (RemoteEvent)
+        ├── PushSevenDayRewardData (RemoteEvent)
+        ├── RequestSevenDayRewardClaim (RemoteEvent)
+        ├── PushSevenDayRewardClaimed (RemoteEvent)
+        ├── RequestSevenDayUnlockAll (RemoteEvent)
         └── ErrorHint（RemoteEvent）
 
 事件清单
@@ -200,6 +209,47 @@ ReplicatedStorage
 - 参数: Uid
 - 说明: 服务端通知客户端移除传送带盲盒（过期/被购买）
 
+36. RequestOnlineRewardData (C->S)
+- 参数: 无
+- 说明: 客户端请求在线奖励状态（在线秒数/已领取/下一奖励）
+- 校验: 仅限玩家自身、频率限制
+
+37. PushOnlineRewardData (S->C)
+- 参数: Payload={ServerTime, DayKey, OnlineSeconds, Claimed, HasClaimable, NextRewardId, NextRewardRemaining}
+- 说明: 服务端推送在线奖励状态快照（含UTC日重置后的最新数据）
+
+38. RequestOnlineRewardClaim (C->S)
+- 参数: RewardId
+- 说明: 客户端请求领取指定在线奖励
+- 校验: 仅限玩家自身、奖励存在、未领取且在线时长达到要求、频率限制
+
+39. PushOnlineRewardClaimed (S->C)
+- 参数: RewardId, Rewards[{Kind, ItemId, Count}], Payload
+- 说明: 服务端确认在线奖励领取成功并回推最新在线奖励状态
+
+
+40. RequestSevenDayRewardData (C->S)
+- Args: AllowRoundReset(optional bool)
+- Note: Client requests seven-day reward state; pass true when opening panel to refresh a completed round.
+- Validation: self player only, rate-limited
+
+41. PushSevenDayRewardData (S->C)
+- Args: Payload={ServerTime, DayKey, Round, PendingReset, IsFeatureUnlocked, UnlockNeedCapsules, OpenedCapsules, HasClaimable, HasLockedRewards, NextRefreshSeconds, Rewards[{Day, Kind, ItemId, Count, Claimed, Claimable}]}
+- Note: Server pushes seven-day reward snapshot and UTC refresh countdown.
+
+42. RequestSevenDayRewardClaim (C->S)
+- Args: Day
+- Note: Client requests claiming reward of a specific day.
+- Validation: self player only, feature unlocked, reward unlocked and unclaimed, rate-limited
+
+43. PushSevenDayRewardClaimed (S->C)
+- Args: Day, Rewards[{Kind, ItemId, Count}], Payload
+- Note: Server confirms seven-day reward claim and pushes latest state.
+
+44. RequestSevenDayUnlockAll (C->S)
+- Args: None
+- Note: Client requests prompting developer product purchase to unlock all remaining rewards in current round.
+- Validation: self player only, feature unlocked, has locked rewards, rate-limited
 备注
 - 所有随机与核心计算只在服务端
 - 客户端不得直接修改任何核心数据

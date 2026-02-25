@@ -2,7 +2,7 @@
 脚本名称: GlobalLeaderboardService
 脚本类型: ModuleScript
 脚本位置: ServerScriptService/Server/GlobalLeaderboardService
-版本: V1.0
+版本: V1.1
 职责: 全局产速排行榜的数据维护与刷新推送
 ]]
 
@@ -14,22 +14,26 @@ local GlobalLeaderboardService = {}
 GlobalLeaderboardService.__index = GlobalLeaderboardService
 
 local ORDERED_STORE_NAME = "Labubu_GlobalOutputSpeed_V1"
-local META_STORE_NAME = "Labubu_GlobalOutputSpeedMeta_V1"
-local REFRESH_INTERVAL = 60
-local FETCH_LIMIT = 60
+local REFRESH_INTERVAL = 120
+local INITIAL_REFRESH_DELAY = 20
+local FETCH_LIMIT = 30
 local DISPLAY_LIMIT = 20
+local ORDERED_WRITE_INTERVAL = 20
+local ORDERED_WRITE_FLUSH_INTERVAL = 5
+local ORDERED_WRITE_FLUSH_BATCH = 8
 
 local orderedStore = DataStoreService:GetOrderedDataStore(ORDERED_STORE_NAME)
-local metaStore = DataStoreService:GetDataStore(META_STORE_NAME)
 
 local playerStates = {} -- [userId] = {Speed, AchievedAt, Name}
 local connections = {} -- [player] = {Connection}
+local orderedWriteStates = {} -- [userId] = {LastWrite, PendingSpeed}
 local cache = {
 	List = {},
 	NextRefresh = 0,
 	LastRefresh = 0,
 }
 local refreshing = false
+local closeBound = false
 
 local function normalizeSpeed(value)
 	local num = tonumber(value)
@@ -77,33 +81,59 @@ end
 local requestEvent = ensureRemoteEvent("RequestGlobalLeaderboard")
 local pushEvent = ensureRemoteEvent("PushGlobalLeaderboard")
 
-local function loadMeta(userId)
-	local key = tostring(userId)
-	local ok, data = pcall(function()
-		return metaStore:GetAsync(key)
-	end)
-	if ok and type(data) == "table" then
-		return data
-	end
-	return nil
-end
-
-local function saveMeta(userId, name, speed, achievedAt)
-	local key = tostring(userId)
-	pcall(function()
-		metaStore:SetAsync(key, {
-			Name = name,
-			Speed = speed,
-			AchievedAt = achievedAt,
-		})
-	end)
-end
-
 local function saveOrdered(userId, speed)
 	local key = tostring(userId)
-	pcall(function()
+	local success, err = pcall(function()
 		orderedStore:SetAsync(key, speed)
 	end)
+	if not success then
+		warn(string.format("[GlobalLeaderboardService] orderedStore:SetAsync failed: userId=%s err=%s", key, tostring(err)))
+	end
+	return success
+end
+
+local function flushOrderedWrite(userId, state, force)
+	if not state or state.PendingSpeed == nil then
+		return false
+	end
+	local now = nowSeconds()
+	if not force and now - (state.LastWrite or 0) < ORDERED_WRITE_INTERVAL then
+		return false
+	end
+	local speed = normalizeSpeed(state.PendingSpeed)
+	if saveOrdered(userId, speed) then
+		state.LastWrite = now
+		if state.PendingSpeed == speed then
+			state.PendingSpeed = nil
+		end
+		return true
+	end
+	return false
+end
+
+local function queueOrderedWrite(userId, speed, force)
+	local state = orderedWriteStates[userId]
+	if not state then
+		state = {
+			LastWrite = 0,
+			PendingSpeed = nil,
+		}
+		orderedWriteStates[userId] = state
+	end
+	state.PendingSpeed = normalizeSpeed(speed)
+	flushOrderedWrite(userId, state, force == true)
+end
+
+local function flushOrderedWrites(force)
+	local flushed = 0
+	for userId, state in pairs(orderedWriteStates) do
+		if flushOrderedWrite(userId, state, force) then
+			flushed += 1
+		end
+		if not force and flushed >= ORDERED_WRITE_FLUSH_BATCH then
+			break
+		end
+	end
 end
 
 local function getPlayerState(player)
@@ -120,14 +150,6 @@ local function getPlayerState(player)
 		AchievedAt = nowSeconds(),
 		Name = player.Name,
 	}
-	local meta = loadMeta(userId)
-	if meta then
-		state.Speed = normalizeSpeed(meta.Speed)
-		state.AchievedAt = tonumber(meta.AchievedAt) or state.AchievedAt
-		if type(meta.Name) == "string" and meta.Name ~= "" then
-			state.Name = meta.Name
-		end
-	end
 	playerStates[userId] = state
 	return state
 end
@@ -156,8 +178,7 @@ local function updatePlayerEntry(player, speed, force)
 	end
 
 	if dirty then
-		saveMeta(player.UserId, state.Name, state.Speed, state.AchievedAt)
-		saveOrdered(player.UserId, state.Speed)
+		queueOrderedWrite(player.UserId, state.Speed, force == true)
 	end
 end
 
@@ -183,23 +204,9 @@ local function fetchTopEntries()
 		local userId = tonumber(entry.key)
 		if userId then
 			local speed = normalizeSpeed(entry.value)
-			local name
-			local achievedAt
 			local state = playerStates[userId]
-			if state then
-				name = state.Name
-				achievedAt = state.AchievedAt
-			else
-				local meta = loadMeta(userId)
-				if meta then
-					name = type(meta.Name) == "string" and meta.Name or nil
-					achievedAt = tonumber(meta.AchievedAt)
-				end
-			end
-			if not name or name == "" then
-				name = tostring(userId)
-			end
-			achievedAt = achievedAt or nowSeconds()
+			local name = state and state.Name or tostring(userId)
+			local achievedAt = state and state.AchievedAt or 0
 			table.insert(results, formatEntry(userId, name, speed, achievedAt))
 		end
 	end
@@ -241,13 +248,30 @@ function GlobalLeaderboardService:Refresh()
 end
 
 function GlobalLeaderboardService:Init()
-	self:Refresh()
+	task.delay(INITIAL_REFRESH_DELAY, function()
+		self:Refresh()
+	end)
+
 	task.spawn(function()
 		while true do
 			task.wait(REFRESH_INTERVAL)
 			self:Refresh()
 		end
 	end)
+
+	task.spawn(function()
+		while true do
+			task.wait(ORDERED_WRITE_FLUSH_INTERVAL)
+			flushOrderedWrites(false)
+		end
+	end)
+
+	if not closeBound then
+		closeBound = true
+		game:BindToClose(function()
+			flushOrderedWrites(true)
+		end)
+	end
 
 	if requestEvent then
 		requestEvent.OnServerEvent:Connect(function(player)
@@ -283,7 +307,13 @@ function GlobalLeaderboardService:UnbindPlayer(player)
 		connection:Disconnect()
 	end
 	connections[player] = nil
+	local writeState = orderedWriteStates[player.UserId]
+	if writeState then
+		flushOrderedWrite(player.UserId, writeState, true)
+	end
+	orderedWriteStates[player.UserId] = nil
 	playerStates[player.UserId] = nil
 end
 
 return GlobalLeaderboardService
+

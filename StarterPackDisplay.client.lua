@@ -1,4 +1,4 @@
---[[
+﻿--[[
 Script Name: StarterPackDisplay
 Script Type: LocalScript
 Script Location: StarterPlayer/StarterPlayerScripts/UI/StarterPackDisplay
@@ -16,6 +16,7 @@ local playerGui = player:WaitForChild("PlayerGui")
 local configFolder = ReplicatedStorage:WaitForChild("Config")
 local modulesFolder = ReplicatedStorage:WaitForChild("Modules")
 local CapsuleConfig = require(configFolder:WaitForChild("CapsuleConfig"))
+local AudioManager = require(modulesFolder:WaitForChild("AudioManager"))
 local GuiResolver = require(modulesFolder:WaitForChild("GuiResolver"))
 
 local function ensureLabubuEvents()
@@ -169,27 +170,56 @@ local function getCapsuleInfo(capsuleId)
 	return nil
 end
 
-local claimTipsGui = GuiResolver.FindLayer(playerGui, { "ClaimTipsGui", "ClaimTipsGUI" }, {
-	"ClaimSuccessful",
-	"LightBg",
-})
-local claimSuccessful = claimTipsGui and claimTipsGui:FindFirstChild("ClaimSuccessful", true)
-local lightBg = claimTipsGui and claimTipsGui:FindFirstChild("LightBg", true)
-local itemListFrame = claimSuccessful and claimSuccessful:FindFirstChild("ItemListFrame", true)
-local itemTemplate = itemListFrame and itemListFrame:FindFirstChild("ItemTemplate", true) or claimSuccessful and claimSuccessful:FindFirstChild("ItemTemplate", true)
+local claimTipsGui
+local claimSuccessful
+local lightBg
+local itemListFrame
+local itemTemplate
+local claimTipsWarned = false
 
-if claimTipsGui and claimTipsGui:IsA("LayerCollector") then
-	claimTipsGui.Enabled = true
+local function resolveClaimTips(waitSeconds)
+	if not claimTipsGui or not claimTipsGui.Parent then
+		if waitSeconds and waitSeconds > 0 then
+			claimTipsGui = GuiResolver.WaitForLayer(playerGui, { "ClaimTipsGui", "ClaimTipsGUI" }, {
+				"ClaimSuccessful",
+				"LightBg",
+			}, waitSeconds)
+		else
+			claimTipsGui = GuiResolver.FindLayer(playerGui, { "ClaimTipsGui", "ClaimTipsGUI" }, {
+				"ClaimSuccessful",
+				"LightBg",
+			})
+		end
+	end
+	if claimTipsGui and claimTipsGui.Parent then
+		claimSuccessful = claimTipsGui:FindFirstChild("ClaimSuccessful", true)
+		lightBg = claimTipsGui:FindFirstChild("LightBg", true)
+		itemListFrame = claimSuccessful and claimSuccessful:FindFirstChild("ItemListFrame", true)
+		itemTemplate = itemListFrame and itemListFrame:FindFirstChild("ItemTemplate", true)
+			or claimSuccessful and claimSuccessful:FindFirstChild("ItemTemplate", true)
+
+		if claimTipsGui:IsA("LayerCollector") then
+			claimTipsGui.Enabled = true
+		end
+		if claimSuccessful and claimSuccessful:IsA("GuiObject") then
+			claimSuccessful.Visible = false
+		end
+		if lightBg and lightBg:IsA("GuiObject") then
+			lightBg.Visible = false
+		end
+		if itemTemplate and itemTemplate:IsA("GuiObject") then
+			itemTemplate.Visible = false
+		end
+		return claimSuccessful ~= nil
+	end
+	if not claimTipsWarned then
+		warn("[StarterPackDisplay] ClaimTipsGui not found")
+		claimTipsWarned = true
+	end
+	return false
 end
-if claimSuccessful and claimSuccessful:IsA("GuiObject") then
-	claimSuccessful.Visible = false
-end
-if lightBg and lightBg:IsA("GuiObject") then
-	lightBg.Visible = false
-end
-if itemTemplate and itemTemplate:IsA("GuiObject") then
-	itemTemplate.Visible = false
-end
+
+resolveClaimTips(0)
 
 local claimCloseConn = nil
 local claimCloseReady = false
@@ -229,10 +259,21 @@ local function closeClaimTips()
 end
 
 local function playClaimTips(rewards)
+	if not claimSuccessful or not claimSuccessful.Parent then
+		resolveClaimTips(5)
+	end
 	if not claimSuccessful or not claimSuccessful:IsA("GuiObject") then
 		return
 	end
 	closeClaimTips()
+	if claimTipsGui and claimTipsGui:IsA("LayerCollector") then
+		claimTipsGui.Enabled = true
+	end
+	if AudioManager and AudioManager.PlaySfx then
+		pcall(function()
+			AudioManager.PlaySfx("RewardPopup")
+		end)
+	end
 	claimSuccessful.Visible = true
 	if itemTemplate and itemTemplate:IsA("GuiObject") then
 		itemTemplate.Visible = false
@@ -360,5 +401,7 @@ local function setupLightRotation()
 end
 
 setupLightRotation()
+
+
 
 
